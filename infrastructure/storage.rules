@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Medicine photos and caregiver recordings are served through the API, which
+// checks that the caller is entitled to the medication first.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

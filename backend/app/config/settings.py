@@ -1,0 +1,42 @@
+import os
+from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+
+class Settings(BaseSettings):
+    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
+    gcp_location: str = os.getenv("GCP_LOCATION", "us-central1")
+    gcs_bucket_name: str = os.getenv("GCS_BUCKET_NAME", "")
+
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+    # When false the API trusts the X-Caregiver-Id header instead of a
+    # Firebase ID token. Local development and demos only.
+    auth_enabled: bool = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+    dev_caregiver_id: str = os.getenv("DEV_CAREGIVER_ID", "dev-caregiver")
+
+    # Shared secret Cloud Scheduler sends on the internal worker endpoint.
+    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token")
+
+    default_retry_after_minutes: int = 10
+    default_max_attempts: int = 2
+
+    cors_origins: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if origin.strip()
+    ]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

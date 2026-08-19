@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CareBridge</string>
+    <string name="reminder_channel_name">Medicine reminders</string>
+    <string name="reminder_channel_description">Plays your family\'s reminder when it is time for a medicine.</string>
+</resources>
