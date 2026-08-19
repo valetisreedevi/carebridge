@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -21,13 +22,22 @@ class Settings(BaseSettings):
     dev_caregiver_id: str = os.getenv("DEV_CAREGIVER_ID", "dev-caregiver")
 
     # Shared secret Cloud Scheduler sends on the internal worker endpoint.
-    # Stripped because a secret written from a shell usually carries a trailing
-    # newline, which Cloud Run keeps in the env var but command substitution
-    # eats on the sending side.
-    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token").strip()
+    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token")
 
     default_retry_after_minutes: int = 10
     default_max_attempts: int = 2
+
+    @field_validator("worker_token")
+    @classmethod
+    def _trim_worker_token(cls, value: str) -> str:
+        """A secret written from a shell carries a trailing newline.
+
+        Cloud Run keeps it in the env var while the sender's command
+        substitution strips it, so the two never compare equal. This must be a
+        validator, not a stripped default: pydantic-settings reads the field
+        straight from the environment and overwrites any default.
+        """
+        return value.strip()
 
     cors_origins: list[str] = [
         origin.strip()

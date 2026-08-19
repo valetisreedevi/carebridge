@@ -117,7 +117,14 @@ TOKEN="$(gcloud secrets versions access latest \
 # One pass a minute is what makes retry and escalation feel immediate.
 if gcloud scheduler jobs describe carebridge-reminders \
   --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1
-then ACTION=update; else ACTION=create; fi
+then
+  ACTION=update
+  # `update http` has no --headers; it takes --update-headers instead.
+  HEADER_FLAG=--update-headers
+else
+  ACTION=create
+  HEADER_FLAG=--headers
+fi
 
 gcloud scheduler jobs "$ACTION" http carebridge-reminders \
   --location "$REGION" \
@@ -125,7 +132,7 @@ gcloud scheduler jobs "$ACTION" http carebridge-reminders \
   --schedule "* * * * *" \
   --uri "${URL}/api/internal/reminders/process" \
   --http-method POST \
-  --headers "X-Worker-Token=${TOKEN}" \
+  "$HEADER_FLAG" "X-Worker-Token=${TOKEN}" \
   --oidc-service-account-email "$SCHEDULER_SA" \
   --oidc-token-audience "$URL" \
   --attempt-deadline 60s
