@@ -1,3 +1,5 @@
+import { firebaseConfigured, idToken } from "./firebase";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 // Until Firebase Auth is switched on, the backend identifies callers by these
@@ -47,8 +49,18 @@ async function request<T>(path: string, options: Options = {}): Promise<T> {
   const { method = "GET", body, as = "caregiver", elderId } = options;
 
   const headers: Record<string, string> = {};
+
   if (as === "caregiver") {
-    headers["X-Caregiver-Id"] = caregiverId();
+    // A signed-in caregiver is identified by their Firebase token. The header
+    // is the fallback the backend accepts only when AUTH_ENABLED is false.
+    const token = firebaseConfigured ? await idToken() : null;
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else if (firebaseConfigured) {
+      throw new ApiError(401, "Please sign in again");
+    } else {
+      headers["X-Caregiver-Id"] = caregiverId();
+    }
   } else {
     const id = elderId ?? pairedElderId();
     if (!id) throw new ApiError(401, "This device is not paired to anyone yet");

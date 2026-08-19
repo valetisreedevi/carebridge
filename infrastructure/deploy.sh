@@ -14,6 +14,10 @@ BUCKET="${BUCKET:-carecompanion-media}"
 # Gemini 3.x models are served from the global endpoint, not a region.
 GENAI_LOCATION="${GENAI_LOCATION:-global}"
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-3.6-flash}"
+# Caregiver/elder identity mode. Keep true once the web client has a
+# Firebase sign-in screen; until then AUTH_ENABLED=false is only safe
+# because the service itself is not publicly invokable.
+AUTH_ENABLED="${AUTH_ENABLED:-true}"
 SERVICE_ACCOUNT="carebridge-api@${PROJECT_ID}.iam.gserviceaccount.com"
 SCHEDULER_SA="carebridge-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -55,6 +59,22 @@ do
     --role "$role" --condition=None --quiet >/dev/null
 done
 
+echo "==> Cloud Build permissions"
+# Building from source runs as the default compute service account, which on a
+# fresh project can neither read the uploaded source nor write the built image.
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format 'value(projectNumber)')"
+BUILD_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+for role in \
+  roles/storage.objectViewer \
+  roles/artifactregistry.writer \
+  roles/logging.logWriter
+do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member "serviceAccount:${BUILD_SA}" \
+    --role "$role" --condition=None --quiet >/dev/null
+done
+
 echo "==> Worker token"
 if ! gcloud secrets describe carebridge-worker-token --project "$PROJECT_ID" >/dev/null 2>&1; then
   openssl rand -hex 32 | gcloud secrets create carebridge-worker-token \
@@ -66,13 +86,13 @@ gcloud secrets add-iam-policy-binding carebridge-worker-token \
   --project "$PROJECT_ID" --quiet >/dev/null
 
 echo "==> Deploying $SERVICE"
-gcloud run deploy "$SERVICE" \
+gcloud run deploy "$SERVICE" --quiet \
   --source backend \
   --region "$REGION" \
   --project "$PROJECT_ID" \
   --service-account "$SERVICE_ACCOUNT" \
   --no-allow-unauthenticated \
-  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=true" \
+  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=${AUTH_ENABLED}" \
   --set-secrets "WORKER_TOKEN=carebridge-worker-token:latest" \
   --min-instances 0 \
   --max-instances 5 \
