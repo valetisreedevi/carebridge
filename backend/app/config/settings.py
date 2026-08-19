@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     dev_caregiver_id: str = os.getenv("DEV_CAREGIVER_ID", "dev-caregiver")
 
     # Shared secret Cloud Scheduler sends on the internal worker endpoint.
-    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token")
+    # Stripped because a secret written from a shell usually carries a trailing
+    # newline, which Cloud Run keeps in the env var but command substitution
+    # eats on the sending side.
+    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token").strip()
 
     default_retry_after_minutes: int = 10
     default_max_attempts: int = 2

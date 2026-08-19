@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from fastapi import Depends, Header, HTTPException, status
 
@@ -81,7 +82,9 @@ def require_worker_token(x_worker_token: str | None = Header(default=None)) -> N
     """Guards the endpoint Cloud Scheduler calls."""
     settings = get_settings()
 
-    if x_worker_token != settings.worker_token:
+    if not secrets.compare_digest(
+        (x_worker_token or "").strip(), settings.worker_token
+    ):
         raise HTTPException(status_code=403, detail="Invalid worker token")
 
 

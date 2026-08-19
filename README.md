@@ -147,3 +147,22 @@ Note that Gemini 3.x is served from Vertex's **global** endpoint, not a region.
   gets the same alert; there is no primary/secondary/emergency ladder yet.
 - **English only.** The data model carries `preferred_language` and the
   clients pass a speech tag, but the prompt and the UI copy are English.
+
+## Deployment status
+
+The API is deployed to Cloud Run as `carebridge-api` in `us-central1`, and
+Cloud Scheduler calls its worker endpoint every minute. The service is
+deployed `--no-allow-unauthenticated`, so it is reachable only by identities
+granted `run.invoker` — currently the project owner and the scheduler service
+account.
+
+```bash
+# smoke-test the deployed API
+python backend/scripts/verify_deployed.py "$(gcloud run services describe \
+  carebridge-api --region us-central1 --format 'value(status.url)')"
+```
+
+Caregiver sign-in needs a one-time Firebase console step that cannot be
+scripted — see `infrastructure/FIREBASE_SETUP.md`. Until it is done the API
+runs with `AUTH_ENABLED=false`, which is safe only because the service is not
+publicly invokable, and must not outlive the private preview.

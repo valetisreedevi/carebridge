@@ -77,7 +77,10 @@ done
 
 echo "==> Worker token"
 if ! gcloud secrets describe carebridge-worker-token --project "$PROJECT_ID" >/dev/null 2>&1; then
-  openssl rand -hex 32 | gcloud secrets create carebridge-worker-token \
+  # printf, not echo: a trailing newline ends up in the Cloud Run env var but
+  # is stripped from the scheduler header by command substitution, and the two
+  # then never match.
+  printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create carebridge-worker-token \
     --data-file=- --project "$PROJECT_ID"
 fi
 gcloud secrets add-iam-policy-binding carebridge-worker-token \

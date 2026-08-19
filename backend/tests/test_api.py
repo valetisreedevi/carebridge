@@ -213,3 +213,26 @@ def test_snooze_beyond_an_hour_is_rejected(client, db):
         headers={"X-Elder-Id": elder_id},
     )
     assert response.status_code == 422
+
+
+def test_worker_token_tolerates_trailing_whitespace(client):
+    """A secret written from a shell usually carries a trailing newline.
+
+    Cloud Run keeps it in the env var while command substitution strips it on
+    the sending side, so the two must still compare equal.
+    """
+    assert (
+        client.post(
+            "/api/internal/reminders/process",
+            headers={"X-Worker-Token": "local-worker-token\n"},
+        ).status_code
+        == 200
+    )
+
+    assert (
+        client.post(
+            "/api/internal/reminders/process",
+            headers={"X-Worker-Token": "not-the-token"},
+        ).status_code
+        == 403
+    )
