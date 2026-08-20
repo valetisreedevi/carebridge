@@ -137,6 +137,8 @@ Note that Gemini 3.x is served from Vertex's **global** endpoint, not a region.
 
 ## Known gaps
 
+- **No reminder has ever reached a real phone.** FCM dispatch is wired and
+  logged, but no device has registered a token, so delivery is unproven.
 - **The Android app has never been compiled.** It was written on a machine
   with no JDK or Android SDK. Open it in Android Studio and expect to fix
   dependency-version drift. See `elder-android/README.md`.
@@ -150,19 +152,43 @@ Note that Gemini 3.x is served from Vertex's **global** endpoint, not a region.
 
 ## Deployment status
 
-The API is deployed to Cloud Run as `carebridge-api` in `us-central1`, and
-Cloud Scheduler calls its worker endpoint every minute. The service is
-deployed `--no-allow-unauthenticated`, so it is reachable only by identities
-granted `run.invoker` — currently the project owner and the scheduler service
-account.
+Live on Cloud Run as `carebridge-api` (revision `00003-zgw`, `us-central1`),
+deployed `--no-allow-unauthenticated` so only identities holding `run.invoker`
+can call it � currently the project owner and the scheduler service account.
 
-```bash
-# smoke-test the deployed API
-python backend/scripts/verify_deployed.py "$(gcloud run services describe \
-  carebridge-api --region us-central1 --format 'value(status.url)')"
+Cloud Scheduler drives `POST /api/internal/reminders/process` every minute,
+and that loop is verified in production, not just locally:
+
+```
+Fired attempt 1, then touched nothing.
+  [ 20s] REMINDER_SENT attempt=1
+  [ 61s] REMINDER_SENT attempt=2   <- scheduler, unaided
+  [123s] ESCALATED     attempt=2   <- scheduler, unaided
+
+Alert: "Amma has not confirmed the 5:06 AM Metformin after 2 reminder attempts."
 ```
 
-Caregiver sign-in needs a one-time Firebase console step that cannot be
-scripted — see `infrastructure/FIREBASE_SETUP.md`. Until it is done the API
-runs with `AUTH_ENABLED=false`, which is safe only because the service is not
-publicly invokable, and must not outlive the private preview.
+```bash
+URL="$(gcloud run services describe carebridge-api   --region us-central1 --format 'value(status.url)')"
+
+python backend/scripts/verify_deployed.py "$URL"    # 11 checks, live Gemini
+python backend/scripts/verify_escalation.py "$URL"  # scheduler drives it alone
+```
+
+`verify_escalation.py` earns its keep: it fires one reminder and then refuses
+to touch the system, so a scheduler that is not actually driving the loop
+fails. It caught a production-only bug that every local test passed through.
+
+### Before anyone else uses this
+
+The API runs with `AUTH_ENABLED=false`, which is safe *only* because the
+service is not publicly invokable. Two things must happen together before that
+changes: complete `infrastructure/FIREBASE_SETUP.md`, then redeploy (the
+`AUTH_ENABLED` default is already `true`).
+
+### What is still unproven
+
+Reminders reach the *loop*, not yet a *person*. Every dispatch so far has
+logged `-> 0 device(s)` because no device has ever registered an FCM token, so
+no elder's phone has actually rung. Proving that needs the Android app built
+and paired on a real handset.
