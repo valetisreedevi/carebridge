@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   friendlyAuthError,
+  googleSignInEnabled,
   registerWithPassword,
   signInWithGoogle,
   signInWithPassword,
@@ -44,7 +45,7 @@ export default function SignIn() {
     <main className="signin">
       <h1>CareBridge</h1>
       <p className="signin__sub">
-        Sign in to look after someone's medication.
+        Keep track of a family member's medication, without having to ask.
       </p>
 
       <form className="signin__form" onSubmit={submit}>
@@ -73,14 +74,16 @@ export default function SignIn() {
 
         {error && <p className="dash__error">{error}</p>}
 
-        <button type="submit" className="signin__primary" disabled={busy}>
+        <button type="submit" className="signin__primary btn-primary" disabled={busy}>
           {busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}
         </button>
       </form>
 
-      <button type="button" onClick={google} disabled={busy}>
-        Continue with Google
-      </button>
+      {googleSignInEnabled && (
+        <button type="button" onClick={google} disabled={busy}>
+          Continue with Google
+        </button>
+      )}
 
       <button
         type="button"

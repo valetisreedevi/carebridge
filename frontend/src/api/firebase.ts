@@ -29,6 +29,11 @@ const config = {
  */
 export const firebaseConfigured = Boolean(config.apiKey && config.projectId);
 
+/** Google sign-in needs an OAuth client configured on the provider. Until
+ *  that exists the button would always fail, so it is not shown. */
+export const googleSignInEnabled =
+  import.meta.env.VITE_GOOGLE_SIGN_IN === "true";
+
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 

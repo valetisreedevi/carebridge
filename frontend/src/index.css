@@ -1,20 +1,49 @@
-:root {
-  --ink: #17212b;
-  --muted: #61717f;
-  --line: #e2e8ee;
-  --page: #f6f8fa;
-  --card: #ffffff;
-  --brand: #1f6f5c;
-  --good: #1f7a4d;
-  --good-bg: #e8f6ee;
-  --warn: #a9601a;
-  --warn-bg: #fdf2e3;
-  --bad: #a3272f;
-  --bad-bg: #fdecec;
+/* CareBridge visual system
+ *
+ * Two audiences with opposite needs, so two scales.
+ *
+ * The caregiver is a busy adult glancing at a phone between other things:
+ * normal type, dense information, status legible at arm's length.
+ *
+ * The elder may have reduced vision, tremor and no interest in software. Their
+ * screen uses roughly double the type size, touch targets over 5rem tall, one
+ * decision per screen, and no navigation at all.
+ *
+ * Colour carries meaning in one direction only: green means recorded, amber
+ * means waiting on a person, red means a human should look. Nothing decorative
+ * uses those hues. Every status is also carried by its label, so the meaning
+ * survives colour blindness and a dim phone screen.
+ */
 
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+:root {
+  --ink: #101a24;
+  --ink-soft: #40515f;
+  --muted: #6b7a88;
+  --line: #e4eaf0;
+  --line-strong: #cfd9e3;
+  --page: #f5f7fa;
+  --card: #ffffff;
+
+  --brand: #12695a;
+  --brand-soft: #e6f2ef;
+  --brand-ink: #0d5247;
+
+  --good: #16704a;
+  --good-bg: #e7f4ec;
+  --warn: #8a5209;
+  --warn-bg: #fdf3e2;
+  --bad: #9b2226;
+  --bad-bg: #fcebeb;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(16, 26, 36, 0.04), 0 8px 24px rgba(16, 26, 36, 0.06);
+
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
   color: var(--ink);
   background: var(--page);
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -26,80 +55,166 @@ body {
   background: var(--page);
 }
 
+h1,
+h2,
+h3 {
+  letter-spacing: -0.011em;
+}
+
 button {
   font: inherit;
   cursor: pointer;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--card);
   color: var(--ink);
-  border-radius: 8px;
-  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.95rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 button:hover:not(:disabled) {
   border-color: var(--brand);
   color: var(--brand);
+  background: var(--brand-soft);
 }
 
 button:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* Never remove the ring; a keyboard user has no other way to see focus. */
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
 input,
-select {
+select,
+textarea {
   font: inherit;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
   background: var(--card);
   color: var(--ink);
   width: 100%;
 }
 
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 550;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-ink);
+  border-color: var(--brand-ink);
+  color: #fff;
+}
+
+/* ---------------- shell ---------------- */
+
 .nav {
   display: flex;
-  gap: 1.25rem;
-  padding: 0.75rem 1.5rem;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.85rem 1.5rem;
   border-bottom: 1px solid var(--line);
   background: var(--card);
+}
+
+.nav__brand {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-right: 0.25rem;
 }
 
 .nav a {
   color: var(--muted);
   text-decoration: none;
   font-size: 0.9rem;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.nav a:hover {
+  color: var(--ink);
 }
 
 .nav a.nav__on {
   color: var(--brand);
   font-weight: 600;
+  border-bottom-color: var(--brand);
+}
+
+.nav__account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.nav__email {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav__account button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
 }
 
 /* ---------------- caregiver dashboard ---------------- */
 
 .dash {
-  max-width: 62rem;
+  max-width: 60rem;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: 2.25rem 1.5rem 5rem;
+}
+
+.dash__header {
+  margin-bottom: 1.5rem;
 }
 
 .dash__header h1 {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.55rem;
 }
 
-.dash__sub {
-  margin: 0.25rem 0 1.5rem;
-  color: var(--muted);
+/* The one line that answers "does anyone need me right now?" */
+.dash__verdict {
+  margin: 0.4rem 0 0;
+  font-size: 1.05rem;
+  color: var(--good);
+  font-weight: 550;
+}
+
+.dash__verdict--alert {
+  color: var(--bad);
 }
 
 .dash__error {
   background: var(--bad-bg);
   color: var(--bad);
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
+  padding: 0.75rem 0.95rem;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
 }
 
 .dash__elders {
@@ -113,15 +228,19 @@ select {
 .chip {
   border-radius: 999px;
   padding: 0.4rem 1rem;
+  font-size: 0.9rem;
 }
 
 .chip--on {
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
+  font-weight: 550;
 }
 
 .chip--on:hover {
+  background: var(--brand-ink);
+  border-color: var(--brand-ink);
   color: #fff;
 }
 
@@ -132,137 +251,194 @@ select {
 }
 
 .dash__addElder input {
-  width: 11rem;
+  width: 10rem;
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: var(--radius);
+  padding: 1.35rem;
   margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
 }
 
 .card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
 }
 
 .card__head h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.card__hint {
+  margin: -0.6rem 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .muted {
   color: var(--muted);
   margin: 0.25rem 0;
+  font-size: 0.9rem;
 }
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 1.75rem 1rem;
+  font-size: 0.92rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------- today's schedule ---------------- */
 
 .schedule {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .schedule__row {
   display: grid;
-  grid-template-columns: 4rem 1fr auto auto;
+  grid-template-columns: 3.6rem 1fr auto auto;
   gap: 1rem;
   align-items: center;
-  padding: 0.8rem 0.9rem;
-  border-radius: 10px;
-  border-left: 4px solid var(--line);
-  margin-bottom: 0.5rem;
-  background: var(--page);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  background: var(--card);
 }
 
 .schedule__row--good {
   border-left-color: var(--good);
   background: var(--good-bg);
+  border-color: transparent;
+  border-left-color: var(--good);
 }
 
 .schedule__row--waiting {
   border-left-color: var(--warn);
   background: var(--warn-bg);
+  border-color: transparent;
+  border-left-color: var(--warn);
 }
 
 .schedule__row--bad {
   border-left-color: var(--bad);
   background: var(--bad-bg);
+  border-color: transparent;
+  border-left-color: var(--bad);
 }
 
 .schedule__time {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .schedule__what {
   display: flex;
   flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.schedule__what strong {
+  font-weight: 600;
 }
 
 .schedule__what small {
-  color: var(--muted);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
 }
 
 .schedule__status {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 550;
+  text-align: right;
+}
+
+.schedule__status small {
+  display: block;
+  font-weight: 400;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
 }
 
 .schedule__now {
-  font-size: 0.8rem;
-  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  white-space: nowrap;
 }
+
+/* ---------------- alerts ---------------- */
 
 .alerts {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .alerts__item {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
   background: var(--bad-bg);
   color: var(--bad);
-  margin-bottom: 0.5rem;
+  font-size: 0.92rem;
 }
 
-.alerts__item--help_requested {
+.alerts__item--help_requested,
+.alerts__item--declined {
   background: var(--warn-bg);
   color: var(--warn);
 }
 
 .alerts__item small {
-  opacity: 0.75;
+  opacity: 0.8;
+  font-size: 0.78rem;
 }
 
 /* ---------------- medication form ---------------- */
 
 .medform {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1rem;
+  border-radius: var(--radius-sm);
+  padding: 1.15rem;
   margin-bottom: 1.25rem;
+  background: var(--page);
 }
 
 .medform__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.9rem;
 }
 
 .medform label {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 550;
 }
 
 .medform__media {
@@ -270,35 +446,124 @@ select {
   flex-wrap: wrap;
   gap: 1.5rem;
   align-items: flex-end;
-  margin-top: 1rem;
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
 }
 
 .medform__file input {
   padding: 0.3rem 0;
   border: none;
+  background: none;
+  font-size: 0.85rem;
 }
 
 .medform__voice {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 550;
+}
+
+.medform__voice small {
+  font-weight: 400;
+  color: var(--good);
+}
+
+.medform__rec {
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 .medform__save {
-  margin-top: 1rem;
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
+  margin-top: 1.1rem;
 }
 
-.medform__save:hover:not(:disabled) {
-  color: #fff;
-  opacity: 0.9;
+/* ---------------- pairing ---------------- */
+
+.pair__code {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  padding: 0.7rem;
+  margin: 0.85rem 0 0.4rem;
+  resize: vertical;
+  word-break: break-all;
+  background: var(--page);
+  color: var(--ink-soft);
 }
 
-/* ---------------- elder device ---------------- */
+.pair__steps {
+  margin: 0 0 1rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+/* ---------------- sign in ---------------- */
+
+.signin {
+  max-width: 23rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.signin h1 {
+  margin: 0;
+  font-size: 1.7rem;
+}
+
+.signin__sub {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.signin__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 550;
+}
+
+.signin__primary {
+  padding: 0.7rem;
+  margin-top: 0.25rem;
+}
+
+.signin__switch {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.4rem;
+}
+
+.signin__switch:hover:not(:disabled) {
+  background: none;
+  color: var(--brand);
+}
+
+/* ---------------- elder device ----------------
+ * Everything below is deliberately oversized. Do not "tidy" these numbers
+ * down to match the dashboard; the scale is the accessibility feature.
+ */
 
 .elder {
   max-width: 30rem;
@@ -308,97 +573,130 @@ select {
 }
 
 .elder--calm {
-  padding-top: 6rem;
+  padding-top: 5rem;
 }
 
 .elder__tick {
-  font-size: 4rem;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 auto 1.5rem;
+  border-radius: 50%;
+  background: var(--good-bg);
   color: var(--good);
+  font-size: 3rem;
+  line-height: 5.5rem;
 }
 
 .elder__title {
-  font-size: 2.4rem;
-  margin: 0 0 1.5rem;
+  font-size: 2.5rem;
+  margin: 0 0 1.75rem;
+  font-weight: 650;
 }
 
 .elder__photo {
   width: 100%;
-  max-width: 16rem;
+  max-width: 15rem;
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid var(--line);
   background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .elder__medicine {
-  font-size: 2.6rem;
+  font-size: 2.75rem;
   font-weight: 700;
-  margin: 1.5rem 0 0.25rem;
+  line-height: 1.1;
+  margin: 1.75rem 0 0.4rem;
 }
 
 .elder__dose {
-  font-size: 1.9rem;
+  font-size: 2rem;
   margin: 0;
+  color: var(--ink);
 }
 
 .elder__food {
   font-size: 1.5rem;
-  color: var(--muted);
-  margin: 0.5rem 0 2rem;
+  color: var(--ink-soft);
+  margin: 0.6rem 0 2rem;
 }
 
 .elder__talk {
   text-align: left;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .elder__turn {
-  font-size: 1.25rem;
-  padding: 0.7rem 1rem;
-  border-radius: 14px;
-  margin: 0 0 0.5rem;
+  font-size: 1.3rem;
+  line-height: 1.45;
+  padding: 0.85rem 1.15rem;
+  border-radius: 18px;
+  margin: 0;
 }
 
 .elder__turn--elder {
   background: var(--card);
-  border: 1px solid var(--line);
-  margin-left: 2rem;
+  border: 1px solid var(--line-strong);
+  margin-left: 2.5rem;
+  border-bottom-right-radius: 6px;
 }
 
 .elder__turn--carebridge {
-  background: var(--good-bg);
-  color: var(--good);
-  margin-right: 2rem;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  margin-right: 2.5rem;
+  border-bottom-left-radius: 6px;
 }
 
 .elder__notice {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
+  line-height: 1.45;
   color: var(--warn);
   background: var(--warn-bg);
-  padding: 0.7rem;
-  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
 }
 
 .elder__mic,
 .elder__button {
   display: block;
   width: 100%;
-  font-size: 1.6rem;
-  padding: 1.15rem;
-  border-radius: 14px;
+  font-size: 1.65rem;
+  padding: 1.35rem;
+  border-radius: 18px;
   margin-bottom: 0.9rem;
+  font-weight: 550;
 }
 
 .elder__mic {
   border: 2px dashed var(--brand);
   color: var(--brand);
+  background: var(--card);
 }
 
 .elder__mic--on {
   background: var(--brand);
   border-style: solid;
   color: #fff;
+  animation: listening 1.4s ease-in-out infinite;
+}
+
+@keyframes listening {
+  50% {
+    box-shadow: 0 0 0 10px rgba(18, 105, 90, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elder__mic--on {
+    animation: none;
+  }
 }
 
 .elder__button--taken {
@@ -408,8 +706,9 @@ select {
 }
 
 .elder__button--taken:hover:not(:disabled) {
+  background: #115c3c;
+  border-color: #115c3c;
   color: #fff;
-  opacity: 0.9;
 }
 
 .elder__button--later {
@@ -417,88 +716,36 @@ select {
 }
 
 .elder__muted {
-  font-size: 1.3rem;
-  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
-/* ---------------- sign in ---------------- */
-
-.signin {
-  max-width: 22rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.elder textarea {
+  font-size: 1rem;
+  min-height: 7rem;
+  margin-bottom: 1.25rem;
 }
 
-.signin h1 {
-  margin: 0;
-  font-size: 1.7rem;
-}
+@media (max-width: 30rem) {
+  .schedule__row {
+    grid-template-columns: 3.2rem 1fr;
+    row-gap: 0.5rem;
+  }
 
-.signin__sub {
-  margin: 0 0 1rem;
-  color: var(--muted);
-}
+  .schedule__status,
+  .schedule__now {
+    grid-column: 2;
+    text-align: left;
+    justify-self: start;
+  }
 
-.signin__form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 0.25rem;
-}
+  .dash__addElder {
+    margin-left: 0;
+    width: 100%;
+  }
 
-.signin__form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.signin__primary {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
-  padding: 0.65rem;
-}
-
-.signin__primary:hover:not(:disabled) {
-  color: #fff;
-  opacity: 0.9;
-}
-
-.signin__switch {
-  border: none;
-  background: none;
-  color: var(--muted);
-  font-size: 0.85rem;
-  padding: 0.25rem;
-}
-
-.nav__account {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.nav__account button {
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
-}
-
-.pair__code {
-  width: 100%;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 0.8rem;
-  padding: 0.6rem;
-  margin: 0.75rem 0 0.25rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  resize: vertical;
-  word-break: break-all;
+  .dash__addElder input {
+    width: 100%;
+  }
 }

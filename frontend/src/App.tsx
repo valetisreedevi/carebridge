@@ -8,6 +8,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import type { User } from "firebase/auth";
+import { pairedElderId } from "./api/client";
 import { firebaseConfigured, signOutCaregiver, watchUser } from "./api/firebase";
 import Dashboard from "./pages/Dashboard";
 import ElderView from "./pages/ElderView";
@@ -16,8 +17,13 @@ import SignIn from "./pages/SignIn";
 function Nav({ user }: { user: User | null }) {
   const { pathname } = useLocation();
 
+  // Once a phone belongs to the elder there is nothing for them to
+  // navigate to, and the caregiver's email is not theirs to see.
+  if (pathname === "/elder" && pairedElderId()) return null;
+
   return (
     <nav className="nav">
+      <span className="nav__brand">CareBridge</span>
       <Link className={pathname === "/" ? "nav__on" : ""} to="/">
         Family
       </Link>
@@ -27,7 +33,7 @@ function Nav({ user }: { user: User | null }) {
 
       {user && (
         <span className="nav__account">
-          {user.email}
+          <span className="nav__email">{user.email}</span>
           <button type="button" onClick={signOutCaregiver}>
             Sign out
           </button>

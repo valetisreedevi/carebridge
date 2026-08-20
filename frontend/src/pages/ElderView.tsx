@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useState as useReactState } from "react";
 import { api, pairedElderId, type Reminder } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
-import PairDevice from "./PairDevice";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
+import PairDevice from "./PairDevice";
 
 const POLL_MS = 15000;
 
 type Turn = { who: "elder" | "carebridge"; text: string };
 
-export default function ElderView() {
-  const [elderId, setElderId] = useReactState(pairedElderId());
-  // With auth on, an id in localStorage is not enough: the device must
-  // still hold a valid elder credential.
-  const [credentialed, setCredentialed] = useReactState(!firebaseConfigured);
+/** Resolving means Firebase has not yet said whether this device is paired. */
+type Credential = "resolving" | "paired" | "unpaired";
 
-  useEffect(
-    () => watchElder((user) => setCredentialed(!firebaseConfigured || Boolean(user))),
-    [],
+export default function ElderView() {
+  const [elderId, setElderId] = useState(pairedElderId());
+  const [credential, setCredential] = useState<Credential>(
+    firebaseConfigured ? "resolving" : "paired",
   );
 
   const [reminder, setReminder] = useState<Reminder | null>(null);
@@ -27,26 +24,48 @@ export default function ElderView() {
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Tracked separately from `notice`: a failed poll must never be able to
+  // look like "nothing to take", or a due medicine disappears silently.
+  const [unreachable, setUnreachable] = useState(false);
+  const [everLoaded, setEverLoaded] = useState(false);
 
   const stopListening = useRef<() => void>(() => {});
   const playedFor = useRef<string | null>(null);
   const lang = "en";
 
+  // Firebase restores a session asynchronously, so polling before this
+  // resolves would fetch with no credential and fail on every first load.
+  useEffect(
+    () =>
+      watchElder((user) => {
+        if (!firebaseConfigured) return;
+        setCredential(user ? "paired" : "unpaired");
+      }),
+    [],
+  );
+
+  const ready = credential === "paired" && Boolean(elderId);
+
   const refresh = useCallback(async () => {
-    if (!elderId) return;
+    if (!ready || !elderId) return;
+
     try {
       const { reminder: next } = await api.activeReminder(elderId);
       setReminder(next);
+      setUnreachable(false);
+      setEverLoaded(true);
     } catch {
-      setNotice("Cannot reach CareBridge right now.");
+      setUnreachable(true);
     }
-  }, [elderId]);
+  }, [ready, elderId]);
 
   useEffect(() => {
+    if (!ready) return;
+
     refresh();
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [ready, refresh]);
 
   // Load the photo and the caregiver's recording for whichever reminder is up.
   useEffect(() => {
@@ -86,8 +105,7 @@ export default function ElderView() {
     if (playedFor.current === reminder.event_id) return;
 
     playedFor.current = reminder.event_id;
-    const audio = new Audio(audioUrl);
-    audio.play().catch(() => {
+    new Audio(audioUrl).play().catch(() => {
       setNotice("Tap anywhere to hear the message from your family.");
     });
   }, [audioUrl, reminder]);
@@ -168,16 +186,45 @@ export default function ElderView() {
     [elderId, reminder, busy, say, refresh],
   );
 
-  if (!elderId || !credentialed) {
+  if (credential === "resolving") {
+    return (
+      <main className="elder elder--calm">
+        <p className="elder__muted">One moment…</p>
+      </main>
+    );
+  }
+
+  if (credential === "unpaired" || !elderId) {
     if (firebaseConfigured) {
       return <PairDevice onPaired={() => setElderId(pairedElderId())} />;
     }
     return (
       <main className="elder elder--calm">
-        <h1>This device is not set up yet</h1>
+        <h1>This phone is not set up yet</h1>
         <p className="elder__muted">
-          Ask your family to pair it from the CareBridge dashboard.
+          Ask your family to set it up from CareBridge.
         </p>
+      </main>
+    );
+  }
+
+  // Say so plainly rather than implying there is nothing to take.
+  if (unreachable && !reminder) {
+    return (
+      <main className="elder elder--calm">
+        <h1>Cannot reach CareBridge</h1>
+        <p className="elder__muted">
+          {everLoaded
+            ? "Please check the internet connection."
+            : "Please check the internet connection, then try again."}
+        </p>
+        <button
+          type="button"
+          className="elder__button elder__button--later"
+          onClick={refresh}
+        >
+          Try again
+        </button>
       </main>
     );
   }
@@ -213,6 +260,12 @@ export default function ElderView() {
       )}
 
       {notice && <p className="elder__notice">{notice}</p>}
+
+      {unreachable && (
+        <p className="elder__notice">
+          CareBridge is offline. Your answer may not be saved yet.
+        </p>
+      )}
 
       {speechSupported && (
         <button

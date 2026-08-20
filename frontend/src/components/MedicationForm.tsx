@@ -168,8 +168,12 @@ export default function MedicationForm({ elderId, onSaved }: Props) {
 
         <div className="medform__voice">
           <span>Your voice</span>
-          <button type="button" onClick={toggleRecording}>
-            {listening ? "Stop recording" : recording ? "Record again" : "Record"}
+          <button
+            type="button"
+            className={listening ? "medform__rec" : ""}
+            onClick={toggleRecording}
+          >
+            {listening ? "Stop recording" : recording ? "Record again" : "Record a message"}
           </button>
           {recording && <small>Saved · plays at reminder time</small>}
         </div>
@@ -177,7 +181,7 @@ export default function MedicationForm({ elderId, onSaved }: Props) {
 
       {error && <p className="dash__error">{error}</p>}
 
-      <button type="submit" className="medform__save" disabled={saving}>
+      <button type="submit" className="medform__save btn-primary" disabled={saving}>
         {saving ? "Saving…" : "Save medication"}
       </button>
     </form>

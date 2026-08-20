@@ -1,20 +1,26 @@
-"""Smoke-tests a deployed CareBridge API over HTTPS.
+"""Smoke-tests a deployed CareBridge API the way a real client uses it.
 
-The service is deployed --no-allow-unauthenticated, so every request carries a
-Google identity token on top of whatever the app itself checks.
+Signs a caregiver in through Identity Platform, pairs an elder device with a
+custom token, and walks the whole flow with those credentials. Nothing here
+uses the X-Caregiver-Id / X-Elder-Id fallback, so this passes only when real
+authentication is working.
 
-    python scripts/verify_deployed.py https://carebridge-api-xxxx.run.app
+    python scripts/verify_deployed.py https://carebridge-api-....run.app
 
-Reads the identity token from CAREBRIDGE_ID_TOKEN, or shells out to
-`gcloud auth print-identity-token`.
+Needs a browser API key: VITE_FIREBASE_API_KEY from frontend/.env.local, or
+CAREBRIDGE_API_KEY in the environment.
 """
 
 import json
 import os
-import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
+from pathlib import Path
+
+IDENTITY = "https://identitytoolkit.googleapis.com/v1"
 
 passed = 0
 failed = 0
@@ -30,31 +36,76 @@ def check(label: str, condition: bool, detail: str = "") -> None:
         print(f"  FAIL  {label}  {detail}")
 
 
-def identity_token() -> str:
-    token = os.getenv("CAREBRIDGE_ID_TOKEN")
-    if token:
-        return token.strip()
+def api_key() -> str:
+    key = os.getenv("CAREBRIDGE_API_KEY")
+    if key:
+        return key.strip()
 
-    return subprocess.run(
-        ["gcloud", "auth", "print-identity-token"],
-        capture_output=True,
-        text=True,
-        check=True,
-        shell=sys.platform == "win32",
-    ).stdout.strip()
+    env_local = Path(__file__).resolve().parents[2] / "frontend" / ".env.local"
+    if env_local.exists():
+        for line in env_local.read_text().splitlines():
+            if line.startswith("VITE_FIREBASE_API_KEY="):
+                return line.split("=", 1)[1].strip()
+
+    raise SystemExit(
+        "No API key. Set CAREBRIDGE_API_KEY or add VITE_FIREBASE_API_KEY to "
+        "frontend/.env.local"
+    )
+
+
+def post(url: str, body: dict, headers: dict | None = None) -> tuple[int, dict]:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json", **(headers or {})},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.status, json.loads(response.read().decode() or "{}")
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode()
+        try:
+            return exc.code, json.loads(raw)
+        except json.JSONDecodeError:
+            return exc.code, {"detail": raw[:300]}
+
+
+def sign_up_caregiver(key: str) -> str:
+    """A throwaway account per run, so repeat runs never collide."""
+    email = f"verify-{uuid.uuid4().hex[:10]}@carebridge-verify.local"
+
+    status, body = post(
+        f"{IDENTITY}/accounts:signUp?key={key}",
+        {"email": email, "password": uuid.uuid4().hex, "returnSecureToken": True},
+    )
+    if status != 200:
+        raise SystemExit(f"Could not create a test caregiver: {body}")
+
+    return body["idToken"]
+
+
+def exchange_custom_token(key: str, custom_token: str) -> str:
+    status, body = post(
+        f"{IDENTITY}/accounts:signInWithCustomToken?key={key}",
+        {"token": custom_token, "returnSecureToken": True},
+    )
+    if status != 200:
+        raise SystemExit(f"Could not pair the elder device: {body}")
+
+    return body["idToken"]
 
 
 class Client:
-    def __init__(self, base: str, token: str):
+    def __init__(self, base: str):
         self.base = base.rstrip("/")
-        self.token = token
 
     def call(
         self,
         method: str,
         path: str,
+        token: str,
         body: dict | None = None,
-        headers: dict | None = None,
     ) -> tuple[int, dict]:
         data = json.dumps(body).encode() if body is not None else None
 
@@ -63,12 +114,10 @@ class Client:
             data=data,
             method=method,
             headers={
-                "Authorization": f"Bearer {self.token}",
+                "Authorization": f"Bearer {token}",
                 **({"Content-Type": "application/json"} if data else {}),
-                **(headers or {}),
             },
         )
-
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
                 raw = response.read().decode()
@@ -86,36 +135,42 @@ def main() -> int:
         print(__doc__)
         return 2
 
-    client = Client(sys.argv[1], identity_token())
-    caregiver = {"X-Caregiver-Id": "deploy-check"}
+    key = api_key()
+    client = Client(sys.argv[1])
 
     print(f"\nAgainst {client.base}\n{'-' * (8 + len(client.base))}")
 
-    status, health = client.call("GET", "/health")
+    status, health = client.call("GET", "/health", "unused")
     check("health responds", status == 200, str(health))
+    check("real authentication is on", health.get("auth_enabled") is True, str(health))
+
+    print("\nCaregiver")
+    caregiver = sign_up_caregiver(key)
+    check("signed in through Identity Platform", bool(caregiver))
+
+    status, unauthenticated = client.call("GET", "/api/elders", "not-a-token")
     check(
-        "running the expected model on the global endpoint",
-        health.get("model", "").startswith("gemini"),
-        str(health),
+        "a bad token is refused",
+        unauthenticated and status in (401, 403),
+        f"got {status}",
     )
-    print(f"    {health}")
 
     status, elder = client.call(
         "POST",
         "/api/elders",
-        {"name": "Amma", "timezone": "Asia/Kolkata", "preferred_language": "te"},
         caregiver,
+        {"name": "Amma", "timezone": "Asia/Kolkata", "preferred_language": "en"},
     )
     check("elder created", status == 201, str(elder))
     if status != 201:
         print(f"\n{passed} passed, {failed} failed")
         return 1
-
     elder_id = elder["id"]
 
     status, medication = client.call(
         "POST",
         "/api/medications",
+        caregiver,
         {
             "elder_id": elder_id,
             "name": "Amlodipine",
@@ -123,36 +178,44 @@ def main() -> int:
             "food_instruction": "BEFORE_FOOD",
             "schedule_times": ["08:00"],
         },
-        caregiver,
     )
     check("medication created", status == 201, str(medication))
     medication_id = medication["id"]
 
-    status, other = client.call(
-        "GET", f"/api/elders/{elder_id}", None, {"X-Caregiver-Id": "someone-else"}
+    stranger = sign_up_caregiver(key)
+    status, _ = client.call("GET", f"/api/elders/{elder_id}", stranger)
+    check("another signed-in caregiver is refused", status == 403, f"got {status}")
+
+    print("\nElder device")
+    status, pairing = client.call(
+        "POST", f"/api/elders/{elder_id}/pairing-token", caregiver
     )
-    check("another caregiver is refused", status == 403, f"got {status}")
+    check("pairing code issued", status == 200, str(pairing))
+
+    elder_token = exchange_custom_token(key, pairing["pairing_token"])
+    check("device paired with an elder credential", bool(elder_token))
 
     status, triggered = client.call(
-        "POST", "/api/demo/trigger-reminder", {"medication_id": medication_id}, caregiver
+        "POST", "/api/demo/trigger-reminder", caregiver, {"medication_id": medication_id}
     )
     check("reminder dispatched", status == 200, str(triggered))
     event_id = triggered.get("event_id")
 
-    elder_headers = {"X-Elder-Id": elder_id}
-    status, active = client.call("GET", "/api/reminders/active", None, elder_headers)
+    status, active = client.call("GET", "/api/reminders/active", elder_token)
     check(
         "elder device sees the reminder",
         status == 200 and active.get("active") is True,
         str(active),
     )
 
+    print("\nConversation")
+
     def say(text: str) -> dict:
         code, reply = client.call(
             "POST",
             "/api/agent/chat",
+            elder_token,
             {"elder_id": elder_id, "event_id": event_id, "message": text},
-            elder_headers,
         )
         if code != 200:
             print(f"    !! agent {code}: {reply}")
@@ -164,7 +227,7 @@ def main() -> int:
 
     question = say("Which medicine is it?")
     check(
-        "Gemini answers from the record",
+        "answers from the record",
         "amlodipine" in question.get("reply", "").lower(),
         question.get("reply", ""),
     )
@@ -176,6 +239,14 @@ def main() -> int:
         str(ambiguous.get("event_status")),
     )
 
+    dose = say("Change it to two tablets from now on.")
+    check(
+        "refuses to change the dose",
+        "confirm_medication_taken" not in dose.get("tool_calls", [])
+        and dose.get("event_status") != "TAKEN",
+        str(dose.get("tool_calls")),
+    )
+
     taken = say("I have taken it now.")
     check(
         "confirmation recorded",
@@ -183,11 +254,12 @@ def main() -> int:
         str(taken.get("event_status")),
     )
 
-    status, today = client.call("GET", f"/api/elders/{elder_id}/today", None, caregiver)
+    print("\nCaregiver dashboard")
+    status, today = client.call("GET", f"/api/elders/{elder_id}/today", caregiver)
     check(
-        "dashboard shows it as taken",
+        "shows the medication as taken",
         any(item["status"] == "TAKEN" for item in today.get("items", [])),
-        str(today),
+        str(today)[:200],
     )
 
     print(f"\n{passed} passed, {failed} failed")

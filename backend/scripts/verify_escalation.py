@@ -13,9 +13,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from verify_deployed import Client, identity_token  # noqa: E402
+from verify_deployed import (  # noqa: E402
+    Client,
+    api_key,
+    exchange_custom_token,
+    sign_up_caregiver,
+)
 
-CAREGIVER = {"X-Caregiver-Id": "escalation-check"}
 POLL_SECONDS = 20
 GIVE_UP_AFTER = 360
 
@@ -25,7 +29,9 @@ def main() -> int:
         print(__doc__)
         return 2
 
-    client = Client(sys.argv[1], identity_token())
+    key = api_key()
+    client = Client(sys.argv[1])
+    caregiver = sign_up_caregiver(key)
 
     print(f"\nAgainst {client.base}")
     print("Setting up a medication that retries after one minute, twice.\n")
@@ -33,14 +39,15 @@ def main() -> int:
     _, elder = client.call(
         "POST",
         "/api/elders",
+        caregiver,
         {"name": "Amma", "timezone": "Asia/Kolkata", "preferred_language": "en"},
-        CAREGIVER,
     )
     elder_id = elder["id"]
 
     _, medication = client.call(
         "POST",
         "/api/medications",
+        caregiver,
         {
             "elder_id": elder_id,
             "name": "Metformin",
@@ -50,12 +57,20 @@ def main() -> int:
             "retry_after_minutes": 1,
             "max_attempts": 2,
         },
-        CAREGIVER,
     )
     medication_id = medication["id"]
 
+    # Reading the event needs an elder credential, same as a real device.
+    _, pairing = client.call(
+        "POST", f"/api/elders/{elder_id}/pairing-token", caregiver
+    )
+    elder_token = exchange_custom_token(key, pairing["pairing_token"])
+
     status, triggered = client.call(
-        "POST", "/api/demo/trigger-reminder", {"medication_id": medication_id}, CAREGIVER
+        "POST",
+        "/api/demo/trigger-reminder",
+        caregiver,
+        {"medication_id": medication_id},
     )
     if status != 200:
         print(f"  FAIL  could not fire the first reminder: {triggered}")
@@ -72,7 +87,7 @@ def main() -> int:
         time.sleep(POLL_SECONDS)
 
         _, event = client.call(
-            "GET", f"/api/medication-events/{event_id}", None, {"X-Elder-Id": elder_id}
+            "GET", f"/api/medication-events/{event_id}", elder_token
         )
         attempt = event.get("attempt", 0)
         state = event.get("status")
@@ -93,7 +108,7 @@ def main() -> int:
         print("\n  FAIL  no escalation within the time limit")
         return 1
 
-    status, alerts = client.call("GET", "/api/caregivers/me/alerts", None, CAREGIVER)
+    _, alerts = client.call("GET", "/api/caregivers/me/alerts", caregiver)
     mine = [a for a in alerts if a.get("event_id") == event_id]
 
     if not mine:
