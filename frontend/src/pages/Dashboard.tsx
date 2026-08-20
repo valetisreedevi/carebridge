@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, pairElder, type Alert, type DayItem, type Elder } from "../api/client";
+import { firebaseConfigured } from "../api/firebase";
 import MedicationForm from "../components/MedicationForm";
 
 const POLL_MS = 10000;
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [adding, setAdding] = useState(false);
   const [newElderName, setNewElderName] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadElders = useCallback(async () => {
@@ -235,17 +237,55 @@ export default function Dashboard() {
               <h2>Elder device</h2>
             </div>
             <p className="muted">
-              Open CareBridge on {elder.name}'s phone and pair it to this person.
+              Open CareBridge on {elder.name}'s phone, go to the elder screen,
+              and paste this code once.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                pairElder(elder.id);
-                window.location.href = "/elder";
-              }}
-            >
-              Pair this browser as {elder.name}
-            </button>
+
+            {firebaseConfigured ? (
+              <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const result = await api.pairingToken(elder.id);
+                      setPairingCode(result.pairing_token);
+                    } catch (e) {
+                      setError(
+                        e instanceof Error ? e.message : "Could not make a code",
+                      );
+                    }
+                  }}
+                >
+                  Get a pairing code for {elder.name}
+                </button>
+
+                {pairingCode && (
+                  <>
+                    <textarea
+                      className="pair__code"
+                      readOnly
+                      rows={4}
+                      value={pairingCode}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                    <p className="muted">
+                      One code, one phone. It expires in an hour, so make a new
+                      one if you do not use it now.
+                    </p>
+                  </>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  pairElder(elder.id);
+                  window.location.href = "/elder";
+                }}
+              >
+                Pair this browser as {elder.name}
+              </button>
+            )}
           </section>
         </>
       )}

@@ -5,6 +5,7 @@ import {
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signInWithPopup,
   signOut,
   type Auth,
@@ -34,6 +35,54 @@ let auth: Auth | null = null;
 if (firebaseConfigured) {
   app = initializeApp(config);
   auth = getAuth(app);
+}
+
+/**
+ * Elder devices sign in as a different principal than the caregiver, so they
+ * get their own Firebase app. A single app has one currentUser, and without
+ * this a caregiver checking the elder screen on their own laptop would sign
+ * themselves out.
+ */
+let elderAuth: Auth | null = null;
+
+function getElderAuth(): Auth {
+  if (!firebaseConfigured) throw new Error("Sign-in is not configured");
+
+  if (!elderAuth) {
+    elderAuth = getAuth(initializeApp(config, "elder"));
+  }
+  return elderAuth;
+}
+
+export async function pairElderDevice(pairingToken: string): Promise<string> {
+  const auth = getElderAuth();
+  const credential = await signInWithCustomToken(auth, pairingToken.trim());
+
+  const claims = await credential.user.getIdTokenResult();
+  const elderId = claims.claims.elder_id;
+
+  if (typeof elderId !== "string") {
+    throw new Error("That code is not a CareBridge pairing code");
+  }
+  return elderId;
+}
+
+export async function elderIdToken(): Promise<string | null> {
+  if (!firebaseConfigured) return null;
+  const user = getElderAuth().currentUser;
+  return user ? user.getIdToken() : null;
+}
+
+export function watchElder(onChange: (user: User | null) => void): () => void {
+  if (!firebaseConfigured) {
+    onChange(null);
+    return () => {};
+  }
+  return onAuthStateChanged(getElderAuth(), onChange);
+}
+
+export async function unpairElderDevice(): Promise<void> {
+  if (firebaseConfigured) await signOut(getElderAuth());
 }
 
 export function getAuthOrNull(): Auth | null {

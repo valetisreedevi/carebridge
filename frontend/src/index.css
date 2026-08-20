@@ -490,3 +490,15 @@ select {
   padding: 0.25rem 0.6rem;
   font-size: 0.8rem;
 }
+
+.pair__code {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 0.6rem;
+  margin: 0.75rem 0 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  resize: vertical;
+  word-break: break-all;
+}

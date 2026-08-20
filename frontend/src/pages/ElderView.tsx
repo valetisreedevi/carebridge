@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useState as useReactState } from "react";
 import { api, pairedElderId, type Reminder } from "../api/client";
+import { firebaseConfigured, watchElder } from "../api/firebase";
+import PairDevice from "./PairDevice";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 
 const POLL_MS = 15000;
@@ -7,7 +10,15 @@ const POLL_MS = 15000;
 type Turn = { who: "elder" | "carebridge"; text: string };
 
 export default function ElderView() {
-  const elderId = pairedElderId();
+  const [elderId, setElderId] = useReactState(pairedElderId());
+  // With auth on, an id in localStorage is not enough: the device must
+  // still hold a valid elder credential.
+  const [credentialed, setCredentialed] = useReactState(!firebaseConfigured);
+
+  useEffect(
+    () => watchElder((user) => setCredentialed(!firebaseConfigured || Boolean(user))),
+    [],
+  );
 
   const [reminder, setReminder] = useState<Reminder | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -157,7 +168,10 @@ export default function ElderView() {
     [elderId, reminder, busy, say, refresh],
   );
 
-  if (!elderId) {
+  if (!elderId || !credentialed) {
+    if (firebaseConfigured) {
+      return <PairDevice onPaired={() => setElderId(pairedElderId())} />;
+    }
     return (
       <main className="elder elder--calm">
         <h1>This device is not set up yet</h1>

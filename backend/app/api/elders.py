@@ -3,7 +3,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
 
-from app.api.auth import current_caregiver_id, require_elder_access
+from app.api.auth import (
+    current_caregiver_id,
+    mint_elder_pairing_token,
+    require_elder_access,
+)
 from app.api import deps
 from app.api.schemas import (
     CreateElderRequest,
@@ -60,6 +64,26 @@ def get_elder(
     caregiver_id: str = Depends(current_caregiver_id),
 ):
     return require_elder_access(elder_id, caregiver_id, deps.firestore_service())
+
+
+@router.post("/elders/{elder_id}/pairing-token")
+def create_pairing_token(
+    elder_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Mints the credential an elder device signs in with.
+
+    The caregiver reads this once and enters it on the elder's phone. The
+    device exchanges it for an ID token carrying an elder_id claim, which is
+    the only thing the elder endpoints accept once auth is on.
+    """
+    elder = require_elder_access(elder_id, caregiver_id, deps.firestore_service())
+
+    return {
+        "elder_id": elder_id,
+        "elder_name": elder["name"],
+        "pairing_token": mint_elder_pairing_token(elder_id),
+    }
 
 
 @router.post("/devices", status_code=201)

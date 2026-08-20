@@ -1,4 +1,4 @@
-import { firebaseConfigured, idToken } from "./firebase";
+import { elderIdToken, firebaseConfigured, idToken } from "./firebase";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -64,7 +64,15 @@ async function request<T>(path: string, options: Options = {}): Promise<T> {
   } else {
     const id = elderId ?? pairedElderId();
     if (!id) throw new ApiError(401, "This device is not paired to anyone yet");
-    headers["X-Elder-Id"] = id;
+
+    const token = firebaseConfigured ? await elderIdToken() : null;
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else if (firebaseConfigured) {
+      throw new ApiError(401, "This device needs to be paired again");
+    } else {
+      headers["X-Elder-Id"] = id;
+    }
   }
 
   const init: RequestInit = { method, headers };
@@ -193,6 +201,12 @@ export const api = {
 
   alerts: () => request<Alert[]>("/api/caregivers/me/alerts"),
 
+  pairingToken: (elderId: string) =>
+    request<{ elder_id: string; elder_name: string; pairing_token: string }>(
+      `/api/elders/${elderId}/pairing-token`,
+      { method: "POST" },
+    ),
+
   triggerReminder: (medicationId: string) =>
     request<{ event_id: string }>("/api/demo/trigger-reminder", {
       method: "POST",
@@ -245,8 +259,11 @@ export const api = {
   mediaObjectUrl: async (path: string, elderId: string): Promise<string> => {
     if (path.startsWith("http")) return path;
 
+    const token = firebaseConfigured ? await elderIdToken() : null;
     const response = await fetch(`${API_URL}${path}`, {
-      headers: { "X-Elder-Id": elderId },
+      headers: token
+        ? { Authorization: `Bearer ${token}` }
+        : { "X-Elder-Id": elderId },
     });
     if (!response.ok) throw new ApiError(response.status, "Could not load media");
 
