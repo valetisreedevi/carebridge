@@ -1,15 +1,9 @@
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-# Vite bakes VITE_* in at build time, so they arrive as build args.
-ARG VITE_API_URL
-ARG VITE_FIREBASE_API_KEY
-ARG VITE_FIREBASE_AUTH_DOMAIN
-ARG VITE_FIREBASE_PROJECT_ID
-RUN npm run build
-
+# Serves an already-built SPA.
+#
+# The build happens outside this image on purpose: Vite bakes VITE_* values in
+# at build time, and gcloud's --set-build-env-vars does not reach Dockerfile
+# ARGs, so a build inside the image silently produces a bundle pointing at
+# localhost. Run `npm run build` first (see infrastructure/deploy-web.sh).
 FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/templates/default.conf.template

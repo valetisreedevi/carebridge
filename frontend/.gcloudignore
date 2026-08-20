@@ -1,0 +1,7 @@
+# Without this file gcloud falls back to .gitignore, which excludes dist/ —
+# and dist/ is exactly what the container serves.
+node_modules/
+.env.local
+src/
+public/
+*.md
