@@ -17,25 +17,81 @@ export function caregiverId(): string {
   return id;
 }
 
+const ELDER_LIST_KEY = "carebridge.elderIds";
+
+/**
+ * Everyone this device is set up for.
+ *
+ * A phone on a shared side table belongs to a household, so this is a list.
+ * The old single-id key is migrated on first read rather than dropped, which
+ * would silently unpair a device already in use.
+ */
+export function pairedElderIds(): string[] {
+  const stored = localStorage.getItem(ELDER_LIST_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) return parsed.filter((id) => typeof id === "string");
+    } catch {
+      // Corrupt value; fall through to the legacy key.
+    }
+  }
+
+  const legacy = localStorage.getItem(ELDER_KEY);
+  return legacy ? [legacy] : [];
+}
+
 export function pairedElderId(): string | null {
-  return localStorage.getItem(ELDER_KEY);
+  return pairedElderIds()[0] ?? null;
 }
 
 export function pairElder(elderId: string): void {
-  localStorage.setItem(ELDER_KEY, elderId);
+  const ids = pairedElderIds();
+  if (!ids.includes(elderId)) ids.push(elderId);
+
+  localStorage.setItem(ELDER_LIST_KEY, JSON.stringify(ids));
+  localStorage.setItem(ELDER_KEY, ids[0]);
 }
 
-export function unpairElder(): void {
-  localStorage.removeItem(ELDER_KEY);
+export function unpairElder(elderId?: string): void {
+  if (!elderId) {
+    localStorage.removeItem(ELDER_LIST_KEY);
+    localStorage.removeItem(ELDER_KEY);
+    return;
+  }
+
+  const ids = pairedElderIds().filter((id) => id !== elderId);
+  localStorage.setItem(ELDER_LIST_KEY, JSON.stringify(ids));
+
+  if (ids.length) localStorage.setItem(ELDER_KEY, ids[0]);
+  else localStorage.removeItem(ELDER_KEY);
 }
 
 export class ApiError extends Error {
   status: number;
+  /** Structured detail, when the API sent one instead of a plain message. */
+  detail: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.status = status;
+    this.detail = detail;
   }
+}
+
+/** What the API returns when a medicine by this name already exists. */
+export type DuplicateMedicine = {
+  message: string;
+  existing_id: string;
+  existing_name: string;
+  existing_times: string[];
+};
+
+export function duplicateMedicine(error: unknown): DuplicateMedicine | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+
+  const detail = error.detail as DuplicateMedicine | undefined;
+  return detail?.existing_id ? detail : null;
 }
 
 type Options = {
@@ -65,7 +121,7 @@ async function request<T>(path: string, options: Options = {}): Promise<T> {
     const id = elderId ?? pairedElderId();
     if (!id) throw new ApiError(401, "This device is not paired to anyone yet");
 
-    const token = firebaseConfigured ? await elderIdToken() : null;
+    const token = firebaseConfigured ? await elderIdToken(id) : null;
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     } else if (firebaseConfigured) {
@@ -88,13 +144,20 @@ async function request<T>(path: string, options: Options = {}): Promise<T> {
 
   if (!response.ok) {
     let detail = response.statusText;
+    let structured: unknown;
     try {
       const parsed = await response.json();
-      detail = typeof parsed.detail === "string" ? parsed.detail : detail;
+      if (typeof parsed.detail === "string") {
+        detail = parsed.detail;
+      } else if (parsed.detail) {
+        // A structured refusal the caller can act on rather than just report.
+        structured = parsed.detail;
+        detail = parsed.detail.message ?? detail;
+      }
     } catch {
       // Non-JSON error body; the status text is the best we have.
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detail, structured);
   }
 
   if (response.status === 204) return undefined as T;
@@ -133,6 +196,22 @@ export type DayItem = {
   attempt: number;
   max_attempts: number | null;
   confirmed_at: string | null;
+  acknowledged_at: string | null;
+};
+
+export type CareTeamMember = {
+  caregiver_id: string;
+  email: string | null;
+  name: string | null;
+  is_you: boolean;
+};
+
+export type HistoryDay = {
+  date: string;
+  taken: number;
+  missed: number;
+  declined: number;
+  total: number;
 };
 
 export type Alert = {
@@ -145,6 +224,7 @@ export type Alert = {
 export type Reminder = {
   event_id: string;
   elder_id: string;
+  elder_name: string | null;
   medication_id: string;
   medication_name: string;
   dose: string;
@@ -167,11 +247,43 @@ export const api = {
     preferred_language: string;
   }) => request<Elder>("/api/elders", { method: "POST", body }),
 
+  createInvite: (elderId: string) =>
+    request<{ code: string; elder_name: string; expires_at: string }>(
+      `/api/elders/${elderId}/invites`,
+      { method: "POST" },
+    ),
+
+  acceptInvite: (code: string) =>
+    request<{ elder_id: string; elder_name: string }>("/api/invites/accept", {
+      method: "POST",
+      body: { code },
+    }),
+
+  listCaregivers: (elderId: string) =>
+    request<CareTeamMember[]>(`/api/elders/${elderId}/caregivers`),
+
+  removeCaregiver: (elderId: string, memberId: string) =>
+    request<void>(`/api/elders/${elderId}/caregivers/${memberId}`, {
+      method: "DELETE",
+    }),
+
+  acknowledgeAlert: (eventId: string) =>
+    request<{ acknowledged_at: string }>(
+      `/api/medication-events/${eventId}/acknowledge`,
+      { method: "POST" },
+    ),
+
+  updateElder: (id: string, body: Record<string, unknown>) =>
+    request<Elder>(`/api/elders/${id}`, { method: "PATCH", body }),
+
   listMedications: (elderId: string) =>
     request<Medication[]>(`/api/elders/${elderId}/medications`),
 
   createMedication: (body: Record<string, unknown>) =>
     request<Medication>("/api/medications", { method: "POST", body }),
+
+  updateMedication: (id: string, body: Record<string, unknown>) =>
+    request<Medication>(`/api/medications/${id}`, { method: "PUT", body }),
 
   deleteMedication: (id: string) =>
     request<void>(`/api/medications/${id}`, { method: "DELETE" }),
@@ -207,17 +319,36 @@ export const api = {
       { method: "POST" },
     ),
 
+  markTakenByCaregiver: (medicationId: string, localTime: string) =>
+    request<{ status: string; confirmed_source: string }>(
+      `/api/medications/${medicationId}/mark-taken`,
+      { method: "POST", body: { local_time: localTime } },
+    ),
+
+  history: (elderId: string, days = 7) =>
+    request<{ elder: Elder; days: HistoryDay[] }>(
+      `/api/elders/${elderId}/history?days=${days}`,
+    ),
+
   triggerReminder: (medicationId: string) =>
-    request<{ event_id: string }>("/api/demo/trigger-reminder", {
-      method: "POST",
-      body: { medication_id: medicationId },
-    }),
+    request<{ event_id: string }>(
+      `/api/medications/${medicationId}/remind-now`,
+      { method: "POST" },
+    ),
+
+  unpairDevice: (elderId: string, fcmToken: string) =>
+    request<void>(
+      `/api/devices/${elderId}?fcm_token=${encodeURIComponent(fcmToken)}`,
+      { method: "DELETE" },
+    ),
 
   activeReminder: (elderId: string) =>
-    request<{ active: boolean; reminder: Reminder | null }>(
-      "/api/reminders/active",
-      { as: "elder", elderId },
-    ),
+    request<{
+      active: boolean;
+      reminder: Reminder | null;
+      reminders: Reminder[];
+      remaining: number;
+    }>("/api/reminders/active", { as: "elder", elderId }),
 
   markTaken: (eventId: string, elderId: string) =>
     request<{ status: string }>(`/api/reminders/${eventId}/taken`, {
@@ -259,7 +390,7 @@ export const api = {
   mediaObjectUrl: async (path: string, elderId: string): Promise<string> => {
     if (path.startsWith("http")) return path;
 
-    const token = firebaseConfigured ? await elderIdToken() : null;
+    const token = firebaseConfigured ? await elderIdToken(elderId) : null;
     const response = await fetch(`${API_URL}${path}`, {
       headers: token
         ? { Authorization: `Bearer ${token}` }

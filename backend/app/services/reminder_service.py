@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 # fires promptly rather than up to a minute late.
 MATERIALISE_AHEAD = timedelta(minutes=5)
 
+# How long after its scheduled time a dose may still be raised. Past this the
+# worker stays quiet: telling someone at 11:00 to take a 07:00 dose invites a
+# double dose, which is worse than the reminder they already missed. Whatever
+# went stale is surfaced to the caregiver instead.
+MATERIALISE_STALE_AFTER = timedelta(hours=2)
+
 
 def _zone(name: str | None) -> ZoneInfo:
     try:
@@ -51,6 +57,14 @@ class ReminderService:
 
             for occurrence in self._occurrences_today(medication, elder, now):
                 if occurrence > now + MATERIALISE_AHEAD:
+                    continue
+
+                if occurrence < now - MATERIALISE_STALE_AFTER:
+                    logger.info(
+                        "Skipping stale occurrence %s for medication %s",
+                        occurrence.isoformat(),
+                        medication["id"],
+                    )
                     continue
 
                 event_id = event_document_id(medication["id"], occurrence)
@@ -118,6 +132,11 @@ class ReminderService:
         reminded = []
         escalated = []
 
+        # One buzz per person per pass, however many tablets are due. Three
+        # separate alerts is how someone learns to ignore the phone; the push
+        # only wakes the device, which then fetches the whole queue.
+        already_alerted: set[str] = set()
+
         for event in self.events.get_due_events(now):
             status = MedicationEventStatus(event["status"])
             attempt = event.get("attempt", 0)
@@ -131,16 +150,34 @@ class ReminderService:
                 self.events.cancel_event(event["id"])
                 continue
 
-            # A snooze always earns another reminder, even past max_attempts:
-            # the elder asked for it, so it is not an unanswered attempt.
-            out_of_attempts = (
-                attempt >= max_attempts and status is not MedicationEventStatus.SNOOZED
-            )
+            # A medication removed after its event was created still has a live
+            # next_attempt_at. Without this the worker keeps reminding, and
+            # eventually escalates, a medicine the caregiver deleted.
+            if not medication.get("active", True):
+                logger.info(
+                    "Cancelling event %s: medication %s was removed",
+                    event["id"],
+                    medication["id"],
+                )
+                self.events.cancel_event(event["id"])
+                continue
 
-            if out_of_attempts:
-                escalated.append(self._escalate(event, elder, medication))
+            # Already handed over. What is still running is the ladder of ways
+            # to reach the caregiver, not the reminder itself.
+            if status is MedicationEventStatus.ESCALATED:
+                followed = self._follow_up(event, elder, medication, now)
+                if followed:
+                    escalated.append(followed)
+                continue
+
+            if self._is_exhausted(event, status, attempt, max_attempts, now):
+                escalated.append(
+                    self._escalate(event, elder, medication, now, status)
+                )
             else:
-                reminded.append(self._remind(event, elder, medication, now))
+                alert = elder["id"] not in already_alerted
+                already_alerted.add(elder["id"])
+                reminded.append(self._remind(event, elder, medication, now, alert))
 
         return {
             "processed_at": now.isoformat(),
@@ -148,8 +185,48 @@ class ReminderService:
             "escalations": escalated,
         }
 
-    def _remind(self, event: dict, elder: dict, medication: dict, now: datetime) -> dict:
-        self.notifications.send_reminder(elder, medication, event)
+    def _is_exhausted(
+        self,
+        event: dict,
+        status: MedicationEventStatus,
+        attempt: int,
+        max_attempts: int,
+        now: datetime,
+    ) -> bool:
+        """Whether the caregiver should now be told.
+
+        A snooze is a real answer, so it never burns an attempt — but confusion
+        and fatigue look exactly like snoozing forever, and the person putting a
+        dose off all morning is the one somebody should hear about. So a snooze
+        is exempt only until it has been used a few times, or until the dose is
+        simply too late to keep waiting on.
+        """
+        if status is not MedicationEventStatus.SNOOZED:
+            return attempt >= max_attempts
+
+        too_many = event.get("snooze_count", 0) >= self.settings.max_snoozes
+        too_late = now >= event["scheduled_at"] + timedelta(
+            minutes=self.settings.escalate_after_minutes
+        )
+        return too_many or too_late
+
+    def _remind(
+        self,
+        event: dict,
+        elder: dict,
+        medication: dict,
+        now: datetime,
+        alert: bool = True,
+    ) -> dict:
+        """Records an attempt, and optionally rings the phone about it.
+
+        Every due dose still counts as reminded — each keeps its own attempt
+        count and escalates on its own — but only the first of a batch makes a
+        sound.
+        """
+        if alert:
+            self.notifications.send_reminder(elder, medication, event)
+
         updated = self.events.record_reminder_sent(event["id"], now)
 
         return {
@@ -157,34 +234,180 @@ class ReminderService:
             "elder": elder["name"],
             "medication": medication["name"],
             "attempt": updated["attempt"],
+            "alerted": alert,
             "next_attempt_at": updated["next_attempt_at"].isoformat(),
         }
 
-    def _escalate(self, event: dict, elder: dict, medication: dict) -> dict:
-        local_time = event["scheduled_at"].astimezone(_zone(elder.get("timezone")))
+    def _next_step_at(self, level: int, now: datetime) -> datetime | None:
+        """When to try the next channel, or None if there is no next channel."""
+        if level + 1 >= len(self.settings.escalation_channels):
+            return None
+        return now + timedelta(minutes=self.settings.escalation_step_minutes)
 
-        # Wording matters: no response is "not confirmed", never "not taken".
-        message = (
-            f"{elder['name']} has not confirmed the "
-            f"{local_time.strftime('%I:%M %p').lstrip('0')} {medication['name']} "
-            f"after {event.get('attempt', 0)} reminder attempts."
+    def _follow_up(
+        self,
+        event: dict,
+        elder: dict,
+        medication: dict,
+        now: datetime,
+    ) -> dict | None:
+        """Tries the next way of reaching the caregiver, unless they answered.
+
+        An acknowledgement stops the ladder immediately: someone saying they
+        have it in hand is the point of the whole thing, and continuing to
+        chase them is how a family learns to mute the app.
+        """
+        if event.get("acknowledged_at"):
+            self.events.advance_escalation(
+                event["id"], event.get("escalation_level", 0), None
+            )
+            return None
+
+        channels = self.settings.escalation_channels
+        level = event.get("escalation_level", 0) + 1
+
+        if level >= len(channels):
+            self.events.advance_escalation(event["id"], level - 1, None)
+            return None
+
+        message = event.get("escalation_message") or (
+            f"{elder['name']} still has not taken the {medication['name']}."
         )
 
-        self.events.escalate_event(event["id"])
         self.notifications.notify_caregiver(
             elder,
             medication,
             event,
             reason="NOT_CONFIRMED",
             message=message,
+            channel=channels[level],
+        )
+        self.events.advance_escalation(
+            event["id"], level, self._next_step_at(level, now)
         )
 
         return {
             "event_id": event["id"],
             "elder": elder["name"],
             "medication": medication["name"],
+            "channel": channels[level],
             "message": message,
         }
+
+    def _escalate(
+        self,
+        event: dict,
+        elder: dict,
+        medication: dict,
+        now: datetime,
+        status: MedicationEventStatus | None = None,
+    ) -> dict:
+        local_time = event["scheduled_at"].astimezone(_zone(elder.get("timezone")))
+        when = local_time.strftime("%I:%M %p").lstrip("0")
+
+        # Wording matters: no response is "not confirmed", never "not taken".
+        # Someone who kept snoozing did answer, so they are described honestly
+        # rather than lumped in with silence.
+        if status is MedicationEventStatus.SNOOZED:
+            message = (
+                f"{elder['name']} has put off the {when} {medication['name']} "
+                f"{event.get('snooze_count', 0)} times and still has not taken it."
+            )
+        else:
+            message = (
+                f"{elder['name']} has not confirmed the "
+                f"{when} {medication['name']} "
+                f"after {event.get('attempt', 0)} reminder attempts."
+            )
+
+        # The worker's clock, not wall-clock: a run working through a backlog
+        # must schedule the next rung relative to the alert it just sent.
+        channels = self.settings.escalation_channels
+
+        self.events.escalate_event(event["id"], self._next_step_at(0, now))
+        # Kept so a later rung says the same thing the first one did.
+        self.events._ref(event["id"]).update({"escalation_message": message})
+
+        self.notifications.notify_caregiver(
+            elder,
+            medication,
+            event,
+            reason="NOT_CONFIRMED",
+            message=message,
+            channel=channels[0] if channels else "push",
+        )
+
+        return {
+            "event_id": event["id"],
+            "elder": elder["name"],
+            "medication": medication["name"],
+            "channel": channels[0] if channels else "push",
+            "message": message,
+        }
+
+    # ---------------- things a caregiver asks for directly ----------------
+
+    def _event_for(self, medication: dict, occurrence: datetime) -> str:
+        """The event for one scheduled instant, created if it never happened."""
+        event_id = event_document_id(medication["id"], occurrence)
+
+        self.events.create_event_if_absent(
+            event_id=event_id,
+            medication_id=medication["id"],
+            elder_id=medication["elder_id"],
+            scheduled_at=occurrence,
+            retry_after_minutes=medication.get(
+                "retry_after_minutes", self.settings.default_retry_after_minutes
+            ),
+            max_attempts=medication.get(
+                "max_attempts", self.settings.default_max_attempts
+            ),
+        )
+        return event_id
+
+    def remind_immediately(self, medication: dict) -> dict:
+        """Rings the elder's phone about one medicine, now."""
+        elder = self.firestore.get_elder(medication["elder_id"])
+        if not elder:
+            raise LookupError(medication["elder_id"])
+
+        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        event_id = self._event_for(medication, now)
+
+        return {"event_id": event_id, **self.process_due_events(now)}
+
+    def confirm_on_behalf(
+        self,
+        medication: dict,
+        local_time: str,
+        caregiver_id: str,
+    ) -> dict:
+        """Closes one of today's doses on the caregiver's word."""
+        elder = self.firestore.get_elder(medication["elder_id"])
+        if not elder:
+            raise LookupError(medication["elder_id"])
+
+        occurrence = self._occurrence_at(elder, local_time)
+        event_id = self._event_for(medication, occurrence)
+        updated = self.events.confirm_by_caregiver(event_id, caregiver_id)
+
+        return {
+            "event_id": event_id,
+            "status": updated["status"],
+            "confirmed_at": updated["confirmed_at"],
+            "confirmed_source": updated["confirmed_source"],
+        }
+
+    def _occurrence_at(self, elder: dict, local_time: str) -> datetime:
+        """Today's instant for a wall-clock time in the elder's own day."""
+        tz = _zone(elder.get("timezone"))
+        hour, minute = (int(part) for part in local_time.split(":"))
+
+        return (
+            datetime.now(tz)
+            .replace(hour=hour, minute=minute, second=0, microsecond=0)
+            .astimezone(timezone.utc)
+        )
 
     # ---------------- entry point ----------------
 

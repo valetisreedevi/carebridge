@@ -25,7 +25,7 @@ def _food_text(medication: dict) -> str:
         return "as instructed"
 
 
-def _present(event: dict, medication: dict) -> dict:
+def _present(event: dict, medication: dict, elder: dict | None = None) -> dict:
     """Everything the elder screen needs in one payload."""
     photo = medication.get("photo_object_name")
     audio = medication.get("caregiver_audio_object_name")
@@ -39,6 +39,10 @@ def _present(event: dict, medication: dict) -> dict:
     return {
         "event_id": event["id"],
         "elder_id": event["elder_id"],
+        # Named, because a phone can be shared. "Time for your eye drops" on a
+        # side table between two people is ambiguous, and ambiguity here means
+        # the wrong person takes a tablet.
+        "elder_name": (elder or {}).get("name"),
         "medication_id": medication["id"],
         "medication_name": medication.get("name"),
         "dose": medication.get("dose"),
@@ -62,17 +66,30 @@ def _present(event: dict, medication: dict) -> dict:
 
 @router.get("/reminders/active")
 def get_active_reminder(elder_id: str = Depends(current_elder_id)):
-    """What the elder device shows when it wakes up on a notification."""
-    event = deps.event_service().get_active_event_for_elder(elder_id)
+    """What the elder device shows when it wakes up on a notification.
 
-    if not event:
-        return {"active": False, "reminder": None}
+    A morning is rarely one tablet, so every open reminder is returned and the
+    device walks them one at a time. `reminder` stays as the first of them so
+    older clients keep working unchanged.
+    """
+    firestore = deps.firestore_service()
+    elder = firestore.get_elder(elder_id)
 
-    medication = deps.firestore_service().get_medication(event["medication_id"])
-    if not medication:
-        return {"active": False, "reminder": None}
+    presented = []
+    for event in deps.event_service().list_open_events_for_elder(elder_id):
+        medication = firestore.get_medication(event["medication_id"])
+        if medication and medication.get("active", True):
+            presented.append(_present(event, medication, elder))
 
-    return {"active": True, "reminder": _present(event, medication)}
+    if not presented:
+        return {"active": False, "reminder": None, "reminders": [], "remaining": 0}
+
+    return {
+        "active": True,
+        "reminder": presented[0],
+        "reminders": presented,
+        "remaining": len(presented),
+    }
 
 
 @router.get("/medication-events/{event_id}")
@@ -80,13 +97,14 @@ def get_event(
     event_id: str,
     elder_id: str = Depends(current_elder_id),
 ):
+    firestore = deps.firestore_service()
     event = _event_for_elder(event_id, elder_id)
-    medication = deps.firestore_service().get_medication(event["medication_id"])
+    medication = firestore.get_medication(event["medication_id"])
 
     if not medication:
         raise HTTPException(status_code=404, detail="Medication not found")
 
-    return _present(event, medication)
+    return _present(event, medication, firestore.get_elder(elder_id))
 
 
 def _apply(action, *args) -> dict:

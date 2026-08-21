@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from google.cloud import firestore
 
 from app.models.medication_event import (
+    CAREGIVER_CONFIRMABLE,
     InvalidTransition,
     MedicationEventStatus,
     can_transition,
@@ -138,11 +139,13 @@ class MedicationEventService:
         return apply(self.db.transaction(), self._ref(event_id))
 
     def confirm_event(self, event_id: str) -> dict:
+        """The elder saying so on their own device."""
         return self._transition(
             event_id,
             MedicationEventStatus.TAKEN,
             {
                 "confirmed_at": datetime.now(timezone.utc),
+                "confirmed_source": "ELDER",
                 "next_attempt_at": None,
             },
         )
@@ -166,24 +169,89 @@ class MedicationEventService:
     ) -> dict:
         now = now or datetime.now(timezone.utc)
 
+        # Counted, because a snooze is exempt from the attempt limit and
+        # something has to stop an elder putting a dose off indefinitely.
+        already = (self.get_event(event_id) or {}).get("snooze_count", 0)
+
         return self._transition(
             event_id,
             MedicationEventStatus.SNOOZED,
             {
                 "next_attempt_at": now + timedelta(minutes=minutes),
                 "snoozed_minutes": minutes,
+                "snooze_count": already + 1,
             },
         )
 
-    def escalate_event(self, event_id: str) -> dict:
+    def escalate_event(self, event_id: str, next_attempt_at: datetime | None = None) -> dict:
+        """Hands the dose to the caregiver.
+
+        next_attempt_at is kept live when there are further ways to reach them,
+        because a push that was never delivered must not be the end of it. The
+        dose itself is finished either way; what continues is the telling.
+        """
         return self._transition(
             event_id,
             MedicationEventStatus.ESCALATED,
             {
                 "escalated_at": datetime.now(timezone.utc),
-                "next_attempt_at": None,
+                "escalation_level": 0,
+                "next_attempt_at": next_attempt_at,
             },
         )
+
+    def advance_escalation(
+        self,
+        event_id: str,
+        level: int,
+        next_attempt_at: datetime | None,
+    ) -> dict:
+        """Moves to the next way of reaching the caregiver.
+
+        Not a transition: the event stays ESCALATED throughout. Only how hard
+        CareBridge is trying to tell somebody changes.
+        """
+        updates = {"escalation_level": level, "next_attempt_at": next_attempt_at}
+        self._ref(event_id).update(updates)
+        return {**(self.get_event(event_id) or {}), **updates}
+
+    def confirm_by_caregiver(self, event_id: str, caregiver_id: str) -> dict:
+        """Records a dose on the word of the family, not the elder's device.
+
+        Kept distinguishable from the elder confirming it themselves. If this
+        record ever reaches a clinician, who said so matters.
+        """
+        event = self.get_event(event_id)
+        if not event:
+            raise KeyError(event_id)
+
+        current = MedicationEventStatus(event["status"])
+        if current not in CAREGIVER_CONFIRMABLE:
+            raise InvalidTransition(current, MedicationEventStatus.TAKEN)
+
+        updates = {
+            "status": MedicationEventStatus.TAKEN.value,
+            "confirmed_at": datetime.now(timezone.utc),
+            "confirmed_by": caregiver_id,
+            "confirmed_source": "CAREGIVER",
+            "next_attempt_at": None,
+        }
+        self._ref(event_id).update(updates)
+        return {**event, **updates}
+
+    def acknowledge_event(self, event_id: str, caregiver_id: str) -> dict:
+        """A caregiver saying "I have got this", which stops the alerts.
+
+        Deliberately separate from confirming the dose: knowing about it is not
+        the same as it having been taken, and the record must not blur the two.
+        """
+        updates = {
+            "acknowledged_at": datetime.now(timezone.utc),
+            "acknowledged_by": caregiver_id,
+            "next_attempt_at": None,
+        }
+        self._ref(event_id).update(updates)
+        return {**(self.get_event(event_id) or {}), **updates}
 
     def cancel_event(self, event_id: str) -> dict:
         return self._transition(
@@ -231,15 +299,64 @@ class MedicationEventService:
         ]
         return sorted(events, key=lambda e: e["scheduled_at"])
 
-    def get_active_event_for_elder(self, elder_id: str) -> dict | None:
-        """The reminder the elder is currently being asked about."""
-        open_statuses = {
-            MedicationEventStatus.REMINDER_SENT.value,
-            MedicationEventStatus.SNOOZED.value,
+    def cancel_outstanding_for_medication(self, medication_id: str) -> list[str]:
+        """Closes any event for a medication that is still expecting an answer.
+
+        Called when a medication is removed. The worker would eventually do
+        this too, but only on its next pass, which is a minute away at best and
+        never if the scheduler is paused.
+        """
+        query = self.db.collection(COLLECTION).where(
+            filter=firestore.FieldFilter("medication_id", "==", medication_id)
+        )
+
+        # Not TERMINAL_STATUSES: an escalated event is terminal for the dose
+        # but still has a live ladder chasing the caregiver about a medicine
+        # that no longer exists.
+        finished = {
+            MedicationEventStatus.TAKEN,
+            MedicationEventStatus.DECLINED,
+            MedicationEventStatus.CANCELLED,
         }
+
+        cancelled = []
+        for snapshot in query.stream():
+            status = MedicationEventStatus(snapshot.to_dict()["status"])
+            if status in finished:
+                continue
+            self.cancel_event(snapshot.id)
+            cancelled.append(snapshot.id)
+
+        return cancelled
+
+    OPEN_STATUSES = frozenset({
+        MedicationEventStatus.REMINDER_SENT.value,
+        MedicationEventStatus.SNOOZED.value,
+    })
+
+    def list_open_events_for_elder(self, elder_id: str) -> list[dict]:
+        """Every reminder still waiting on an answer, earliest first.
+
+        A morning is rarely one tablet. Returning only the latest hid the rest
+        from the elder while they kept counting down towards escalation.
+        """
         events = [
-            e for e in self._for_elder(elder_id) if e["status"] in open_statuses
+            e for e in self._for_elder(elder_id) if e["status"] in self.OPEN_STATUSES
         ]
-        if not events:
-            return None
-        return max(events, key=lambda e: e["scheduled_at"])
+        return sorted(events, key=lambda e: e["scheduled_at"])
+
+    def list_events_for_elder_between(
+        self,
+        elder_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict]:
+        events = [
+            e for e in self._for_elder(elder_id) if start <= e["scheduled_at"] < end
+        ]
+        return sorted(events, key=lambda e: e["scheduled_at"])
+
+    def get_active_event_for_elder(self, elder_id: str) -> dict | None:
+        """The one the elder is asked about first."""
+        events = self.list_open_events_for_elder(elder_id)
+        return events[0] if events else None

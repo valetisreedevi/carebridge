@@ -21,11 +21,49 @@ class Settings(BaseSettings):
     auth_enabled: bool = os.getenv("AUTH_ENABLED", "false").lower() == "true"
     dev_caregiver_id: str = os.getenv("DEV_CAREGIVER_ID", "dev-caregiver")
 
+    # Turns away caregivers who have not clicked the link in their sign-up
+    # email. Off by default so local runs and demos are not blocked on a inbox.
+    require_verified_email: bool = (
+        os.getenv("REQUIRE_VERIFIED_EMAIL", "false").lower() == "true"
+    )
+
     # Shared secret Cloud Scheduler sends on the internal worker endpoint.
     worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token")
 
     default_retry_after_minutes: int = 10
     default_max_attempts: int = 2
+
+    # A snooze is a real answer, so it does not burn an attempt. These two stop
+    # that exemption becoming a way to put a dose off forever.
+    max_snoozes: int = 3
+    escalate_after_minutes: int = 90
+
+    # How a caregiver is reached, in order, each step tried only if the one
+    # before it went unanswered. Push alone fails closed and silently: no
+    # granted permission means the alert is a database row nobody sees.
+    #
+    # A delimited string, not a list: pydantic-settings parses list-typed env
+    # vars as JSON before any validator runs, which stops the app booting.
+    escalation_channels_raw: str = os.getenv("ESCALATION_CHANNELS", "push,email")
+
+    # How long a step is given before the next one is tried.
+    escalation_step_minutes: int = int(os.getenv("ESCALATION_STEP_MINUTES", "5"))
+
+    @property
+    def escalation_channels(self) -> list[str]:
+        return [c.strip() for c in self.escalation_channels_raw.split(",") if c.strip()]
+
+    # Email escalation. The password is never held here; it arrives from Secret
+    # Manager as an env var, the same way the worker token does.
+    smtp_host: str = os.getenv("SMTP_HOST", "")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_from: str = os.getenv("SMTP_FROM", "")
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
 
     @field_validator("worker_token")
     @classmethod

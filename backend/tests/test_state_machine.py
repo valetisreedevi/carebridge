@@ -91,14 +91,54 @@ def test_pending_events_cannot_jump_straight_to_taken(events, event_id):
         events.confirm_event(event_id)
 
 
-def test_every_terminal_status_is_a_dead_end():
-    terminal = [
+def test_a_finished_dose_is_a_dead_end():
+    """Nothing reopens a dose the elder answered, or one that was cancelled."""
+    finished = [
         MedicationEventStatus.TAKEN,
         MedicationEventStatus.DECLINED,
-        MedicationEventStatus.ESCALATED,
         MedicationEventStatus.CANCELLED,
     ]
 
-    for status in terminal:
+    for status in finished:
         for target in MedicationEventStatus:
             assert not can_transition(status, target)
+
+
+def test_an_escalated_dose_can_only_be_cancelled(events, event_id):
+    """ESCALATED ends the dose but not the ladder chasing the caregiver.
+
+    The event stays live, so removing the medicine has to be able to close it.
+    Nothing else in the lifecycle may reopen it.
+    """
+    assert can_transition(
+        MedicationEventStatus.ESCALATED, MedicationEventStatus.CANCELLED
+    )
+
+    for target in (
+        MedicationEventStatus.PENDING,
+        MedicationEventStatus.REMINDER_SENT,
+        MedicationEventStatus.SNOOZED,
+        MedicationEventStatus.DECLINED,
+        MedicationEventStatus.TAKEN,
+    ):
+        assert not can_transition(MedicationEventStatus.ESCALATED, target)
+
+
+def test_a_caregiver_may_vouch_for_a_dose_the_device_never_saw(events, event_id):
+    """The override lives outside the lifecycle map, on purpose."""
+    events.record_reminder_sent(event_id)
+    events.escalate_event(event_id)
+
+    updated = events.confirm_by_caregiver(event_id, "caregiver_1")
+
+    assert updated["status"] == MedicationEventStatus.TAKEN.value
+    assert updated["confirmed_source"] == "CAREGIVER"
+
+
+def test_a_caregiver_cannot_overturn_a_refusal(events, event_id):
+    """The elder said no. Marking it taken from another room is not a fix."""
+    events.record_reminder_sent(event_id)
+    events.decline_event(event_id, reason="feeling sick")
+
+    with pytest.raises(InvalidTransition):
+        events.confirm_by_caregiver(event_id, "caregiver_1")

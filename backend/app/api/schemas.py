@@ -1,4 +1,5 @@
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -7,11 +8,41 @@ from app.models.medication import FoodInstruction, Frequency
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
+def _known_timezone(value: str) -> str:
+    """Rejects a timezone the server cannot resolve.
+
+    Without this an unknown name is accepted and silently treated as UTC, which
+    schedules every reminder at the wrong hour with nothing to show for it.
+    """
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError(f"{value!r} is not a known IANA timezone")
+    return value
+
+
 class CreateElderRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     phone: str | None = Field(default=None, max_length=32)
     preferred_language: str = Field(default="en", max_length=8)
     timezone: str = Field(default="Asia/Kolkata", max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return _known_timezone(value)
+
+
+class UpdateElderRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=32)
+    preferred_language: str | None = Field(default=None, max_length=8)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        return None if value is None else _known_timezone(value)
 
 
 class CreateMedicationRequest(BaseModel):
@@ -24,6 +55,9 @@ class CreateMedicationRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     retry_after_minutes: int = Field(default=10, ge=1, le=120)
     max_attempts: int = Field(default=2, ge=1, le=5)
+    # Set once the caregiver has been shown the medicine they already have and
+    # has said they meant a separate one anyway.
+    allow_duplicate: bool = False
 
     @field_validator("schedule_times")
     @classmethod
@@ -79,7 +113,11 @@ class AgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
-class TriggerReminderRequest(BaseModel):
-    """Fires a medication now instead of waiting for its scheduled time."""
+class MarkTakenRequest(BaseModel):
+    """Which of a medicine's scheduled times the caregiver is closing."""
 
-    medication_id: str
+    local_time: str = Field(pattern=TIME_PATTERN.pattern)
+
+
+class AcceptInviteRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=32)

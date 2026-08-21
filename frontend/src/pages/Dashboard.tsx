@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, pairElder, type Alert, type DayItem, type Elder } from "../api/client";
+import {
+  api,
+  pairElder,
+  type Alert,
+  type DayItem,
+  type CareTeamMember,
+  type Elder,
+  type HistoryDay,
+  type Medication,
+} from "../api/client";
 import { firebaseConfigured } from "../api/firebase";
 import MedicationForm from "../components/MedicationForm";
 
@@ -13,6 +22,7 @@ const STATUS_LABEL: Record<string, string> = {
   SNOOZED: "Snoozed",
   PENDING: "Reminder due",
   UPCOMING: "Later today",
+  MISSED: "Missed — no reminder sent",
   CANCELLED: "Cancelled",
 };
 
@@ -24,8 +34,41 @@ const STATUS_TONE: Record<string, string> = {
   SNOOZED: "waiting",
   PENDING: "waiting",
   UPCOMING: "idle",
+  MISSED: "bad",
   CANCELLED: "idle",
 };
+
+/** The browser knows every IANA zone; a caregiver only needs a short list. */
+const COMMON_ZONES = [
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Australia/Sydney",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "UTC",
+];
+
+function zoneChoices(current: string): string[] {
+  const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return [...new Set([current, here, ...COMMON_ZONES].filter(Boolean))];
+}
+
+/** What the clock currently reads there, so the choice can be sanity-checked. */
+function timeIn(zone: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeStyle: "short",
+      timeZone: zone,
+    }).format(new Date());
+  } catch {
+    return "";
+  }
+}
 
 const FOOD_LABEL: Record<string, string> = {
   BEFORE_FOOD: "before food",
@@ -34,15 +77,45 @@ const FOOD_LABEL: Record<string, string> = {
   ANY_TIME: "any time",
 };
 
+/** A row where the useful action is recording the dose, not chasing it. */
+function needsAttention(item: DayItem): boolean {
+  return (
+    item.status === "ESCALATED" ||
+    item.status === "MISSED" ||
+    item.status === "REMINDER_SENT" ||
+    item.status === "SNOOZED"
+  );
+}
+
+/** Rows are keyed by medicine and time; one medicine can appear twice a day. */
+function rowKey(item: DayItem): string {
+  return `${item.medication_id}-${item.local_time}`;
+}
+
 /** The single line a worried family member actually reads. */
 function verdict(items: DayItem[]): { text: string; alert: boolean } {
+  // Acknowledged means the caregiver has already taken it on. Keeping it in
+  // the headline is how a dashboard trains someone to stop reading it.
   const needsYou = items.filter(
-    (i) => i.status === "ESCALATED" || i.status === "DECLINED",
+    (i) =>
+      (i.status === "ESCALATED" || i.status === "DECLINED") &&
+      !i.acknowledged_at,
   );
   if (needsYou.length) {
     const names = [...new Set(needsYou.map((i) => i.medication_name))];
     return {
       text: `${names.join(" and ")} needs your attention`,
+      alert: true,
+    };
+  }
+
+  // A time that came and went without a reminder is the caregiver's problem to
+  // know about, so it outranks anything still in flight.
+  const missed = items.filter((i) => i.status === "MISSED");
+  if (missed.length) {
+    const names = [...new Set(missed.map((i) => i.medication_name))];
+    return {
+      text: `No reminder went out for ${names.join(" and ")}`,
       alert: true,
     };
   }
@@ -68,14 +141,108 @@ function verdict(items: DayItem[]): { text: string; alert: boolean } {
   return { text: "Everything is on track", alert: false };
 }
 
+/** Where the day stands, under the one line that says how it is going. */
+function Progress({ items }: { items: DayItem[] }) {
+  const taken = items.filter((i) => i.status === "TAKEN").length;
+  const missed = items.filter(
+    (i) => (i.status === "ESCALATED" || i.status === "MISSED") && !i.acknowledged_at,
+  ).length;
+  const waiting = items.filter(
+    (i) => i.status === "REMINDER_SENT" || i.status === "SNOOZED",
+  ).length;
+
+  return (
+    <div className="progress">
+      <div
+        className="progress__bar"
+        role="img"
+        aria-label={`${taken} of ${items.length} taken`}
+      >
+        <span
+          className="progress__fill"
+          style={{ width: `${(taken / items.length) * 100}%` }}
+        />
+      </div>
+      <p className="progress__counts">
+        <strong>
+          {taken} of {items.length}
+        </strong>{" "}
+        taken
+        {waiting > 0 && <> · {waiting} waiting</>}
+        {missed > 0 && <span className="progress__missed"> · {missed} missed</span>}
+      </p>
+    </div>
+  );
+}
+
+/** CB-08: the week behind today, which is the question families carry. */
+function History({ days }: { days: HistoryDay[] }) {
+  const weekday = (date: string) =>
+    new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+      weekday: "narrow",
+    });
+
+  return (
+    <section className="card">
+      <div className="card__head">
+        <h2>This week</h2>
+      </div>
+
+      <ul className="week">
+        {days.map((day) => {
+          const tone =
+            day.total === 0
+              ? "empty"
+              : day.missed > 0
+                ? "bad"
+                : day.taken === day.total
+                  ? "good"
+                  : "part";
+
+          return (
+            <li key={day.date} className={`week__day week__day--${tone}`}>
+              <span className="week__letter">{weekday(day.date)}</span>
+              <span className="week__count">
+                {day.total === 0 ? "–" : `${day.taken}/${day.total}`}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="card__hint week__legend">
+        Doses recorded as taken, out of those scheduled. A day with nothing
+        scheduled shows a dash.
+      </p>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const [elders, setElders] = useState<Elder[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [items, setItems] = useState<DayItem[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [adding, setAdding] = useState(false);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [team, setTeam] = useState<CareTeamMember[]>([]);
+  const [inviteCode, setInviteCode] = useState<{
+    elderId: string;
+    code: string;
+  } | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryDay[]>([]);
+  const [confirmingRemind, setConfirmingRemind] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [newElderName, setNewElderName] = useState("");
-  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<{
+    elderId: string;
+    code: string;
+  } | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -95,14 +262,27 @@ export default function Dashboard() {
   const loadDay = useCallback(async () => {
     if (!selected) return;
     try {
-      const [day, alertList] = await Promise.all([
+      const [day, alertList, meds, past] = await Promise.all([
         api.today(selected),
         api.alerts(),
+        api.listMedications(selected),
+        api.history(selected, 7),
       ]);
       setItems(day.items);
       setAlerts(alertList);
+      setMedications(meds.filter((m) => m.active !== false));
+      setHistory(past.days);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load");
+    }
+  }, [selected]);
+
+  const loadTeam = useCallback(async () => {
+    if (!selected) return;
+    try {
+      setTeam(await api.listCaregivers(selected));
+    } catch {
+      // The care team is supporting detail; the day matters more.
     }
   }, [selected]);
 
@@ -116,8 +296,9 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [loadDay]);
 
-  // Switching person should not leave the previous person's code on screen.
-  useEffect(() => setPairingCode(null), [selected]);
+  useEffect(() => {
+    loadTeam();
+  }, [loadTeam]);
 
   const addElder = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -138,6 +319,16 @@ export default function Dashboard() {
   };
 
   const trigger = async (medicationId: string) => {
+    // Two steps rather than a dialog. This lights up a phone, plays a recorded
+    // voice and can wake somebody; Remove asks before it acts and this used
+    // not to, which had the confirmation on the reversible action only.
+    if (confirmingRemind !== medicationId) {
+      setConfirmingRemind(medicationId);
+      return;
+    }
+
+    setConfirmingRemind(null);
+    setOpenMenu(null);
     try {
       await api.triggerReminder(medicationId);
       await loadDay();
@@ -146,11 +337,87 @@ export default function Dashboard() {
     }
   };
 
+  const acknowledge = async (eventId: string) => {
+    try {
+      await api.acknowledgeAlert(eventId);
+      await loadDay();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not mark it handled");
+    }
+  };
+
+  const markTaken = async (medicationId: string, localTime: string) => {
+    setOpenMenu(null);
+    try {
+      await api.markTakenByCaregiver(medicationId, localTime);
+      await loadDay();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not record it");
+    }
+  };
+
+  const removeMedication = async (medicationId: string) => {
+    try {
+      await api.deleteMedication(medicationId);
+      setRemoving(null);
+      await loadDay();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove it");
+    }
+  };
+
+  const invite = async () => {
+    if (!selected) return;
+    try {
+      const created = await api.createInvite(selected);
+      setInviteCode({ elderId: selected, code: created.code });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not make an invite");
+    }
+  };
+
+  const join = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!joinCode.trim()) return;
+
+    setJoinNotice(null);
+    try {
+      const joined = await api.acceptInvite(joinCode.trim());
+      setJoinCode("");
+      setJoinNotice(`You now share ${joined.elder_name}'s care.`);
+      await loadElders();
+      setSelected(joined.elder_id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That code did not work");
+    }
+  };
+
+  const removeCaregiver = async (memberId: string) => {
+    if (!selected) return;
+    try {
+      await api.removeCaregiver(selected, memberId);
+      await loadTeam();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove them");
+    }
+  };
+
+  const changeTimezone = async (zone: string) => {
+    if (!selected) return;
+    try {
+      await api.updateElder(selected, { timezone: zone });
+      await loadElders();
+      await loadDay();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the timezone");
+    }
+  };
+
   const getCode = async (elderId: string) => {
     setPairingBusy(true);
     try {
       const result = await api.pairingToken(elderId);
-      setPairingCode(result.pairing_token);
+      setPairingCode({ elderId, code: result.pairing_token });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not make a code");
     } finally {
@@ -168,6 +435,8 @@ export default function Dashboard() {
         <p className={`dash__verdict ${status.alert ? "dash__verdict--alert" : ""}`}>
           {status.text}
         </p>
+
+        {items.length > 0 && <Progress items={items} />}
       </header>
 
       {error && (
@@ -198,7 +467,23 @@ export default function Dashboard() {
           />
           <button type="submit">Add</button>
         </form>
+
+        <form className="dash__addElder" onSubmit={join}>
+          <input
+            value={joinCode}
+            onChange={(event) => setJoinCode(event.target.value)}
+            placeholder="Have an invite code?"
+            aria-label="Invite code from another family member"
+          />
+          <button type="submit">Join</button>
+        </form>
       </section>
+
+      {joinNotice && (
+        <p className="dash__notice" role="status">
+          {joinNotice}
+        </p>
+      )}
 
       {loaded && !elder && (
         <section className="card">
@@ -213,10 +498,86 @@ export default function Dashboard() {
           <section className="card">
             <div className="card__head">
               <h2>{elder.name}'s medications</h2>
-              <button type="button" onClick={() => setAdding((v) => !v)}>
-                {adding ? "Cancel" : "Add medication"}
-              </button>
+              <div className="card__headActions">
+                <button
+                  type="button"
+                  className="btn-quiet"
+                  onClick={() => setShowSettings((v) => !v)}
+                >
+                  {showSettings ? "Done" : "Settings"}
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary btn-primary--sm"
+                  onClick={() => setAdding((v) => !v)}
+                >
+                  {adding ? "Cancel" : "Add medication"}
+                </button>
+              </div>
             </div>
+
+            {showSettings && (
+              <div className="settings">
+                <label>
+                  Timezone for {elder.name}
+                  <select
+                    value={elder.timezone}
+                    onChange={(event) => changeTimezone(event.target.value)}
+                  >
+                    {zoneChoices(elder.timezone).map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone.replace(/_/g, " ")} — {timeIn(zone)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="settings__note">
+                  Reminder times are read in {elder.name}'s timezone, not yours.
+                  It is {timeIn(elder.timezone)} there now.
+                </p>
+
+                <div className="team">
+                  <h3>Who gets told</h3>
+                  <p className="settings__note">
+                    Everyone here is alerted when {elder.name} misses a dose.
+                  </p>
+
+                  <ul className="team__list">
+                    {team.map((member) => (
+                      <li key={member.caregiver_id}>
+                        <span>
+                          {member.email ?? member.name ?? member.caregiver_id}
+                          {member.is_you && <small> · you</small>}
+                        </span>
+                        {!member.is_you && team.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-quiet btn-quiet--danger"
+                            onClick={() => removeCaregiver(member.caregiver_id)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {inviteCode?.elderId === elder.id ? (
+                    <div className="team__code">
+                      <p className="settings__note">
+                        Send this to the family member who should also be told.
+                        It works once, and only for the next three days.
+                      </p>
+                      <code>{inviteCode.code}</code>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn-quiet" onClick={invite}>
+                      Invite someone
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {adding && (
               <MedicationForm
@@ -239,7 +600,9 @@ export default function Dashboard() {
                   <li
                     key={`${item.medication_id}-${item.local_time}`}
                     className={`schedule__row schedule__row--${
-                      STATUS_TONE[item.status] ?? "idle"
+                      item.acknowledged_at
+                        ? "idle"
+                        : (STATUS_TONE[item.status] ?? "idle")
                     }`}
                   >
                     <span className="schedule__time">{item.local_time}</span>
@@ -258,7 +621,9 @@ export default function Dashboard() {
                     </span>
 
                     <span className="schedule__status">
-                      {STATUS_LABEL[item.status] ?? item.status}
+                      {item.acknowledged_at
+                        ? "You said you have it"
+                        : (STATUS_LABEL[item.status] ?? item.status)}
                       {item.attempt > 0 && item.status !== "TAKEN" && (
                         <small>
                           reminder {item.attempt} of {item.max_attempts}
@@ -266,19 +631,153 @@ export default function Dashboard() {
                       )}
                     </span>
 
-                    <button
-                      type="button"
-                      className="schedule__now"
-                      onClick={() => trigger(item.medication_id)}
-                      title="Send this reminder now instead of waiting"
-                    >
-                      Remind now
-                    </button>
+                    {/* One action visible, ranked by what this row needs, and
+                        the rest behind a menu. Five medicines used to mean
+                        fifteen controls competing with the information. */}
+                    <span className="schedule__actions">
+                      {needsAttention(item) ? (
+                        <button
+                          type="button"
+                          className="btn-primary btn-primary--sm"
+                          onClick={() =>
+                            markTaken(item.medication_id, item.local_time)
+                          }
+                          title="Record it, on your word rather than theirs"
+                        >
+                          They took it
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={
+                            confirmingRemind === item.medication_id
+                              ? "btn-danger"
+                              : "btn-quiet"
+                          }
+                          onClick={() => trigger(item.medication_id)}
+                          onBlur={() => setConfirmingRemind(null)}
+                          title="Send this reminder now instead of waiting"
+                        >
+                          {confirmingRemind === item.medication_id
+                            ? "Send it now?"
+                            : "Remind now"}
+                        </button>
+                      )}
+
+                      <span className="rowmenu">
+                        <button
+                          type="button"
+                          className="btn-quiet rowmenu__toggle"
+                          aria-haspopup="true"
+                          aria-expanded={openMenu === rowKey(item)}
+                          aria-label={`More for ${item.medication_name}`}
+                          onClick={() =>
+                            setOpenMenu(
+                              openMenu === rowKey(item) ? null : rowKey(item),
+                            )
+                          }
+                        >
+                          ⋯
+                        </button>
+
+                        {openMenu === rowKey(item) && (
+                          <span className="rowmenu__items">
+                            {needsAttention(item) && (
+                              <button
+                                type="button"
+                                onClick={() => trigger(item.medication_id)}
+                              >
+                                {confirmingRemind === item.medication_id
+                                  ? "Send it now?"
+                                  : "Remind now"}
+                              </button>
+                            )}
+                            {item.event_id &&
+                              item.status === "ESCALATED" &&
+                              !item.acknowledged_at && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    acknowledge(item.event_id as string)
+                                  }
+                                >
+                                  I have got this
+                                </button>
+                              )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenu(null);
+                                setEditing(
+                                  editing === item.medication_id
+                                    ? null
+                                    : item.medication_id,
+                                );
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="rowmenu__danger"
+                              onClick={() => {
+                                setOpenMenu(null);
+                                setRemoving(item.medication_id);
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                    </span>
+
+                    {editing === item.medication_id && (
+                      <div className="schedule__editor">
+                        <MedicationForm
+                          elderId={elder.id}
+                          existing={medications.find(
+                            (m) => m.id === item.medication_id,
+                          )}
+                          onCancel={() => setEditing(null)}
+                          onSaved={() => {
+                            setEditing(null);
+                            loadDay();
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {removing === item.medication_id && (
+                      <div className="schedule__confirm" role="alertdialog">
+                        <span>
+                          Stop reminding {elder.name} about{" "}
+                          <strong>{item.medication_name}</strong>? Today's
+                          record is kept.
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          onClick={() => removeMedication(item.medication_id)}
+                        >
+                          Remove it
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-quiet"
+                          onClick={() => setRemoving(null)}
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
           </section>
+
+          {history.length > 0 && <History days={history} />}
 
           <section className="card">
             <div className="card__head">
@@ -326,18 +825,18 @@ export default function Dashboard() {
                 >
                   {pairingBusy
                     ? "Making a code…"
-                    : pairingCode
+                    : pairingCode?.elderId === elder.id
                       ? "Make a new code"
                       : "Get a pairing code"}
                 </button>
 
-                {pairingCode && (
+                {pairingCode?.elderId === elder.id && (
                   <>
                     <textarea
                       className="pair__code"
                       readOnly
                       rows={4}
-                      value={pairingCode}
+                      value={pairingCode.code}
                       onFocus={(e) => e.currentTarget.select()}
                       aria-label={`Pairing code for ${elder.name}`}
                     />

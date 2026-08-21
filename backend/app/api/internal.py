@@ -1,12 +1,9 @@
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.auth import current_caregiver_id, require_elder_access, require_worker_token
 from app.api import deps
-from app.api.schemas import TriggerReminderRequest
-from app.services.medication_event_service import event_document_id
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +29,27 @@ def list_alerts(caregiver_id: str = Depends(current_caregiver_id)):
     return deps.notification_service().list_for_caregiver(caregiver_id)
 
 
-@router.post("/demo/trigger-reminder")
-def trigger_reminder(
-    request: TriggerReminderRequest,
+@router.post("/medication-events/{event_id}/acknowledge")
+def acknowledge_alert(
+    event_id: str,
     caregiver_id: str = Depends(current_caregiver_id),
 ):
-    """Fires a medication immediately so a demo does not wait for the clock."""
-    firestore = deps.firestore_service()
-    medication = firestore.get_medication(request.medication_id)
+    """"I have got this" — stops CareBridge chasing the caregiver.
 
-    if not medication:
-        raise HTTPException(status_code=404, detail="Medication not found")
-
-    elder = require_elder_access(medication["elder_id"], caregiver_id, firestore)
-
-    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    event_id = event_document_id(medication["id"], now)
-
+    Separate from marking the dose taken: knowing about a missed dose is not
+    the same as it having been swallowed, and the record must not blur them.
+    """
     events = deps.event_service()
-    events.create_event(
-        event_id=event_id,
-        medication_id=medication["id"],
-        elder_id=elder["id"],
-        scheduled_at=now,
-        retry_after_minutes=medication.get("retry_after_minutes", 10),
-        max_attempts=medication.get("max_attempts", 2),
-    )
+    event = events.get_event(event_id)
 
-    result = deps.reminder_service().process_due_events(now)
-    return {"event_id": event_id, **result}
+    if not event:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    require_elder_access(event["elder_id"], caregiver_id, deps.firestore_service())
+    updated = events.acknowledge_event(event_id, caregiver_id)
+
+    return {
+        "event_id": event_id,
+        "acknowledged_at": updated["acknowledged_at"],
+        "status": updated["status"],
+    }

@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 
 from app.api.auth import current_caregiver_id, require_elder_access
 from app.api import deps
-from app.api.schemas import CreateMedicationRequest, UpdateMedicationRequest
+from app.api.schemas import (
+    CreateMedicationRequest,
+    MarkTakenRequest,
+    UpdateMedicationRequest,
+)
 from app.services.storage_service import AUDIO_TYPES, IMAGE_TYPES
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -22,15 +26,50 @@ def _authorized_medication(medication_id: str, caregiver_id: str) -> dict:
     return medication
 
 
+def _same_medicine(firestore, elder_id: str, name: str) -> dict | None:
+    """An active medicine for this elder already going by this name."""
+    wanted = name.strip().casefold()
+
+    for medication in firestore.list_medications_for_elder(elder_id):
+        if (medication.get("name") or "").strip().casefold() == wanted:
+            return medication
+
+    return None
+
+
 @router.post("/medications", status_code=201)
 def create_medication(
     request: CreateMedicationRequest,
     caregiver_id: str = Depends(current_caregiver_id),
 ):
-    firestore = deps.firestore_service()
-    require_elder_access(request.elder_id, caregiver_id, firestore)
+    """Adds a medicine, refusing a second one by the same name by default.
 
-    data = request.model_dump(mode="json")
+    Five identically named entries is not clutter — to the person taking them
+    it reads as five separate medicines and invites a double dose. Almost
+    always the caregiver meant another time on the medicine they already have,
+    which is why the refusal carries what they would need to do that instead.
+    """
+    firestore = deps.firestore_service()
+    elder = require_elder_access(request.elder_id, caregiver_id, firestore)
+
+    if not request.allow_duplicate:
+        existing = _same_medicine(firestore, request.elder_id, request.name)
+        if existing:
+            times = existing.get("schedule_times") or []
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        f"{elder['name']} already has {existing['name']} at "
+                        f"{', '.join(times) or 'no set time'}."
+                    ),
+                    "existing_id": existing["id"],
+                    "existing_name": existing["name"],
+                    "existing_times": times,
+                },
+            )
+
+    data = request.model_dump(mode="json", exclude={"allow_duplicate"})
     # The first scheduled time is the one shown in single-time UIs.
     data["schedule_time"] = data["schedule_times"][0]
 
@@ -81,8 +120,50 @@ def delete_medication(
     medication_id: str,
     caregiver_id: str = Depends(current_caregiver_id),
 ):
+    """Stops a medication, including any reminder already waiting on an answer.
+
+    Deactivating the schedule alone leaves today's events live: they keep
+    reminding, and escalate, a medicine the caregiver just removed.
+    """
     _authorized_medication(medication_id, caregiver_id)
     deps.firestore_service().delete_medication(medication_id)
+    deps.event_service().cancel_outstanding_for_medication(medication_id)
+
+
+@router.post("/medications/{medication_id}/remind-now")
+def remind_now(
+    medication_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Sends a medication's reminder immediately instead of waiting for it.
+
+    This used to live at /api/demo/trigger-reminder. It is a real feature the
+    dashboard offers, and a door marked "demo" has no business standing open in
+    front of medical data.
+    """
+    medication = _authorized_medication(medication_id, caregiver_id)
+    return deps.reminder_service().remind_immediately(medication)
+
+
+@router.post("/medications/{medication_id}/mark-taken")
+def mark_taken_by_caregiver(
+    medication_id: str,
+    request: MarkTakenRequest,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Records a dose the caregiver knows was taken.
+
+    Covers the ordinary case of phoning and hearing "yes, I took it". Works
+    whether or not a reminder ever went out: a dose that was missed entirely
+    has no event yet, so one is created and closed in the same breath.
+    """
+    medication = _authorized_medication(medication_id, caregiver_id)
+
+    return deps.reminder_service().confirm_on_behalf(
+        medication=medication,
+        local_time=request.local_time,
+        caregiver_id=caregiver_id,
+    )
 
 
 async def _read_upload(

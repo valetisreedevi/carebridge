@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
-import { api } from "../api/client";
+import {
+  api,
+  duplicateMedicine,
+  type DuplicateMedicine,
+  type Medication,
+} from "../api/client";
 
 const FOOD_OPTIONS = [
   { value: "BEFORE_FOOD", label: "Before food" },
@@ -11,20 +16,29 @@ const FOOD_OPTIONS = [
 type Props = {
   elderId: string;
   onSaved: () => void;
+  /** Present when editing; absent when adding a new medication. */
+  existing?: Medication;
+  onCancel?: () => void;
 };
 
-export default function MedicationForm({ elderId, onSaved }: Props) {
-  const [name, setName] = useState("");
-  const [dose, setDose] = useState("");
-  const [food, setFood] = useState("BEFORE_FOOD");
-  const [time, setTime] = useState("08:00");
-  const [retry, setRetry] = useState(10);
-  const [attempts, setAttempts] = useState(2);
+export default function MedicationForm({
+  elderId,
+  onSaved,
+  existing,
+  onCancel,
+}: Props) {
+  const [name, setName] = useState(existing?.name ?? "");
+  const [dose, setDose] = useState(existing?.dose ?? "");
+  const [food, setFood] = useState(existing?.food_instruction ?? "BEFORE_FOOD");
+  const [time, setTime] = useState(existing?.schedule_times?.[0] ?? "08:00");
+  const [retry, setRetry] = useState(existing?.retry_after_minutes ?? 10);
+  const [attempts, setAttempts] = useState(existing?.max_attempts ?? 2);
   const [photo, setPhoto] = useState<File | null>(null);
   const [recording, setRecording] = useState<Blob | null>(null);
   const [listening, setListening] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clash, setClash] = useState<DuplicateMedicine | null>(null);
 
   const recorder = useRef<MediaRecorder | null>(null);
 
@@ -55,26 +69,55 @@ export default function MedicationForm({ elderId, onSaved }: Props) {
     }
   };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async (event: React.FormEvent | null, force = false) => {
+    event?.preventDefault();
     setSaving(true);
     setError(null);
+    if (force) setClash(null);
+
+    const fields = {
+      name: name.trim(),
+      dose: dose.trim(),
+      food_instruction: food,
+      schedule_times: [time],
+      retry_after_minutes: retry,
+      max_attempts: attempts,
+    };
 
     try {
-      const medication = await api.createMedication({
-        elder_id: elderId,
-        name: name.trim(),
-        dose: dose.trim(),
-        food_instruction: food,
-        schedule_times: [time],
-        retry_after_minutes: retry,
-        max_attempts: attempts,
-      });
+      const medication = existing
+        ? await api.updateMedication(existing.id, fields)
+        : await api.createMedication({
+            elder_id: elderId,
+            ...fields,
+            allow_duplicate: force,
+          });
 
       // Media is optional; a failed upload should not lose the medication.
       if (photo) await api.uploadImage(medication.id, photo, photo.name);
       if (recording) await api.uploadAudio(medication.id, recording, "voice.webm");
 
+      onSaved();
+    } catch (e) {
+      // Not an error to report but a choice to offer: almost always the
+      // caregiver meant another time on the medicine they already have.
+      const duplicate = duplicateMedicine(e);
+      if (duplicate) setClash(duplicate);
+      else setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Folds this time into the medicine that already exists. */
+  const addTimeToExisting = async () => {
+    if (!clash) return;
+    setSaving(true);
+    try {
+      await api.updateMedication(clash.existing_id, {
+        schedule_times: [...new Set([...clash.existing_times, time])],
+      });
+      setClash(null);
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save");
@@ -181,9 +224,42 @@ export default function MedicationForm({ elderId, onSaved }: Props) {
 
       {error && <p className="dash__error">{error}</p>}
 
-      <button type="submit" className="medform__save btn-primary" disabled={saving}>
-        {saving ? "Saving…" : "Save medication"}
-      </button>
+      {clash && (
+        <div className="medform__clash" role="alertdialog">
+          <p>
+            {clash.message} Did you mean to add <strong>{time}</strong> to it?
+          </p>
+          <div className="medform__clashActions">
+            <button
+              type="button"
+              className="btn-primary btn-primary--sm"
+              onClick={addTimeToExisting}
+              disabled={saving}
+            >
+              Add {time} to {clash.existing_name}
+            </button>
+            <button
+              type="button"
+              className="btn-quiet"
+              onClick={() => save(null, true)}
+              disabled={saving}
+            >
+              No, it is a separate medicine
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="medform__actions">
+        <button type="submit" className="medform__save btn-primary" disabled={saving}>
+          {saving ? "Saving…" : existing ? "Save changes" : "Save medication"}
+        </button>
+        {onCancel && (
+          <button type="button" className="btn-quiet" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

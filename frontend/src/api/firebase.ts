@@ -1,13 +1,19 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import {
   GoogleAuthProvider,
+  applyActionCode,
+  checkActionCode,
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithCustomToken,
   signInWithPopup,
   signOut,
+  verifyPasswordResetCode,
   type Auth,
   type User,
 } from "firebase/auth";
@@ -47,47 +53,71 @@ if (firebaseConfigured) {
  * get their own Firebase app. A single app has one currentUser, and without
  * this a caregiver checking the elder screen on their own laptop would sign
  * themselves out.
+ *
+ * One app per person, not one per device: a phone on a shared side table can
+ * be paired to a couple, and each of them needs their own live session for
+ * the API to tell their reminders apart.
  */
-let elderAuth: Auth | null = null;
+const elderApps = new Map<string, Auth>();
 
-function getElderAuth(): Auth {
+function elderAuthFor(elderId: string): Auth {
   if (!firebaseConfigured) throw new Error("Sign-in is not configured");
 
-  if (!elderAuth) {
-    elderAuth = getAuth(initializeApp(config, "elder"));
+  let auth = elderApps.get(elderId);
+  if (!auth) {
+    auth = getAuth(initializeApp(config, `elder:${elderId}`));
+    elderApps.set(elderId, auth);
   }
-  return elderAuth;
+  return auth;
+}
+
+/** Reads the elder id out of a pairing code without claiming the session. */
+function scratchAuth(): Auth {
+  if (!firebaseConfigured) throw new Error("Sign-in is not configured");
+  return elderAuthFor("__pairing__");
 }
 
 export async function pairElderDevice(pairingToken: string): Promise<string> {
-  const auth = getElderAuth();
-  const credential = await signInWithCustomToken(auth, pairingToken.trim());
+  const code = pairingToken.trim();
 
-  const claims = await credential.user.getIdTokenResult();
+  // Which person this code belongs to is only knowable after signing in, and
+  // the session has to live under that person's own app. So: read it on a
+  // scratch app, then sign in properly. Custom tokens stay valid for an hour,
+  // so the second use is fine.
+  const probe = await signInWithCustomToken(scratchAuth(), code);
+  const claims = await probe.user.getIdTokenResult();
   const elderId = claims.claims.elder_id;
 
   if (typeof elderId !== "string") {
     throw new Error("That code is not a CareBridge pairing code");
   }
+
+  await signInWithCustomToken(elderAuthFor(elderId), code);
+  await signOut(scratchAuth());
+
   return elderId;
 }
 
-export async function elderIdToken(): Promise<string | null> {
+export async function elderIdToken(elderId: string): Promise<string | null> {
   if (!firebaseConfigured) return null;
-  const user = getElderAuth().currentUser;
+  const user = elderAuthFor(elderId).currentUser;
   return user ? user.getIdToken() : null;
 }
 
-export function watchElder(onChange: (user: User | null) => void): () => void {
+/** Resolves once Firebase has restored (or failed to restore) the session. */
+export function watchElder(
+  elderId: string,
+  onChange: (user: User | null) => void,
+): () => void {
   if (!firebaseConfigured) {
     onChange(null);
     return () => {};
   }
-  return onAuthStateChanged(getElderAuth(), onChange);
+  return onAuthStateChanged(elderAuthFor(elderId), onChange);
 }
 
-export async function unpairElderDevice(): Promise<void> {
-  if (firebaseConfigured) await signOut(getElderAuth());
+export async function unpairElderDevice(elderId: string): Promise<void> {
+  if (firebaseConfigured) await signOut(elderAuthFor(elderId));
 }
 
 export function getAuthOrNull(): Auth | null {
@@ -114,7 +144,60 @@ export async function signInWithPassword(email: string, password: string) {
 
 export async function registerWithPassword(email: string, password: string) {
   if (!auth) throw new Error("Sign-in is not configured");
-  await createUserWithEmailAndPassword(auth, email, password);
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+
+  // Sent on every new account. Whether an unconfirmed address may actually use
+  // the API is the backend's REQUIRE_VERIFIED_EMAIL call, not the browser's.
+  await sendEmailVerification(credential.user);
+}
+
+export async function resendVerificationEmail() {
+  if (auth?.currentUser) await sendEmailVerification(auth.currentUser);
+}
+
+export function emailIsVerified(user: User | null): boolean {
+  // Google accounts arrive verified; only the password flow needs the prompt.
+  return Boolean(user?.emailVerified);
+}
+
+export async function sendPasswordReset(email: string) {
+  if (!auth) throw new Error("Sign-in is not configured");
+  await sendPasswordResetEmail(auth, email);
+}
+
+/* ---------------- handling the links those emails contain ----------------
+ *
+ * Firebase used to handle these on its own hosted page. It is now this app's
+ * /auth/action route, so the wording is ours and a half-delivered link can say
+ * so instead of "the selected page mode is invalid".
+ */
+
+/** Confirms an email address. Also used for the email-change flows. */
+export async function applyEmailActionCode(oobCode: string) {
+  if (!auth) throw new Error("Sign-in is not configured");
+  await applyActionCode(auth, oobCode);
+}
+
+/** Whose account a reset link belongs to, so the page can say the address. */
+export async function passwordResetEmail(oobCode: string): Promise<string> {
+  if (!auth) throw new Error("Sign-in is not configured");
+  return verifyPasswordResetCode(auth, oobCode);
+}
+
+export async function completePasswordReset(oobCode: string, password: string) {
+  if (!auth) throw new Error("Sign-in is not configured");
+  await confirmPasswordReset(auth, oobCode, password);
+}
+
+/** The address a verification link belongs to, for a friendlier confirmation. */
+export async function actionCodeEmail(oobCode: string): Promise<string | null> {
+  if (!auth) return null;
+  try {
+    const info = await checkActionCode(auth, oobCode);
+    return info.data.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function signInWithGoogle() {
@@ -141,6 +224,17 @@ export function friendlyAuthError(error: unknown): string {
     return "Please use a password of at least six characters.";
   }
   if (code.includes("popup-closed")) return "Sign-in was cancelled.";
+  if (code.includes("too-many-requests")) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+  if (code.includes("invalid-email")) return "That does not look like an email address.";
+  if (code.includes("expired-action-code")) {
+    return "That link has expired. Ask for a new one and use it within an hour.";
+  }
+  if (code.includes("invalid-action-code")) {
+    return "That link is not valid any more — it may already have been used.";
+  }
+  if (code.includes("user-disabled")) return "That account has been disabled.";
   if (code.includes("network")) return "Cannot reach the sign-in service.";
 
   return "Sign-in did not work. Please try again.";

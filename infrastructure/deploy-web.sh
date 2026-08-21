@@ -35,6 +35,12 @@ gcloud run deploy "$SERVICE" --quiet \
 URL="$(gcloud run services describe "$SERVICE" \
   --region "$REGION" --project "$PROJECT_ID" --format 'value(status.url)')"
 
+PRIMARY="https://${SERVICE}-$(gcloud projects describe "$PROJECT_ID"   --format 'value(projectNumber)').${REGION}.run.app"
+
 echo
-echo "Web client: $URL"
-echo "Make sure the API allows that origin: CORS_ORIGINS_RAW=$URL"
+echo "Web client: $PRIMARY"
+echo "  also at:  $URL"
+echo
+echo "Both hostnames reach this service, so deploy.sh puts both in CORS_ORIGINS_RAW."
+echo "If the email links should point here too, run:"
+echo "  PROJECT_ID=$PROJECT_ID ./infrastructure/configure-auth-links.sh"

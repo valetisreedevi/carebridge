@@ -8,6 +8,10 @@ from app.services.firestore_service import FirestoreService
 
 logger = logging.getLogger(__name__)
 
+# Last verified email per caregiver id, filled in as tokens are checked. Not a
+# cache to read from: it exists so upsert_caregiver can persist the address.
+CAREGIVER_EMAILS: dict[str, str | None] = {}
+
 try:
     import firebase_admin
     from firebase_admin import auth as firebase_auth
@@ -54,6 +58,26 @@ def current_caregiver_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+
+    # An elder device holds a real Firebase token too. It verifies fine, so
+    # without this check a paired phone could create elders and act as a
+    # caregiver. A device is never a person with an account.
+    if claims.get("elder_id"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This is an elder device token, not a caregiver sign-in",
+        )
+
+    if settings.require_verified_email and not claims.get("email_verified"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please confirm your email address, then sign in again",
+        )
+
+    # Stashed for the escalation ladder, which needs somewhere to write to.
+    # Taken from the verified token rather than the request body, so a caller
+    # cannot nominate someone else's address to be alerted.
+    CAREGIVER_EMAILS[claims["uid"]] = claims.get("email")
 
     return claims["uid"]
 

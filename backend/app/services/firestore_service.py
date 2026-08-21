@@ -92,11 +92,71 @@ class FirestoreService:
     def get_elder(self, elder_id: str) -> dict | None:
         return _doc(self.db.collection("elders").document(elder_id).get())
 
+    def update_elder(self, elder_id: str, data: dict) -> None:
+        self.db.collection("elders").document(elder_id).update({
+            **data,
+            "updated_at": datetime.now(timezone.utc),
+        })
+
     def list_elders_for_caregiver(self, caregiver_id: str) -> list[dict]:
         query = self.db.collection("elders").where(
             filter=firestore.FieldFilter("caregiver_ids", "array_contains", caregiver_id)
         )
         return [{"id": d.id, **d.to_dict()} for d in query.stream()]
+
+    def add_caregiver_to_elder(self, elder_id: str, caregiver_id: str) -> dict | None:
+        elder = self.get_elder(elder_id)
+        if not elder:
+            return None
+
+        caregivers = list(elder.get("caregiver_ids") or [])
+        if caregiver_id not in caregivers:
+            caregivers.append(caregiver_id)
+            self.update_elder(elder_id, {"caregiver_ids": caregivers})
+
+        return self.get_elder(elder_id)
+
+    def remove_caregiver_from_elder(self, elder_id: str, caregiver_id: str) -> None:
+        elder = self.get_elder(elder_id)
+        if not elder:
+            return
+
+        caregivers = [c for c in (elder.get("caregiver_ids") or []) if c != caregiver_id]
+        self.update_elder(elder_id, {"caregiver_ids": caregivers})
+
+    # ---------------- invites ----------------
+
+    def create_invite(
+        self,
+        code_hash: str,
+        elder_id: str,
+        created_by: str,
+        expires_at: datetime,
+    ) -> None:
+        """Stores an invite under the hash of its code, never the code itself.
+
+        The code is a credential: anyone holding it can read a family member's
+        medication record. It is shown to the caregiver once and kept nowhere.
+        """
+        self.db.collection("caregiver_invites").document(code_hash).set({
+            "elder_id": elder_id,
+            "created_by": created_by,
+            "expires_at": expires_at,
+            "accepted_at": None,
+            "accepted_by": None,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+    def get_invite(self, code_hash: str) -> dict | None:
+        return _doc(
+            self.db.collection("caregiver_invites").document(code_hash).get()
+        )
+
+    def accept_invite(self, code_hash: str, caregiver_id: str) -> None:
+        self.db.collection("caregiver_invites").document(code_hash).update({
+            "accepted_at": datetime.now(timezone.utc),
+            "accepted_by": caregiver_id,
+        })
 
     def caregiver_owns_elder(self, caregiver_id: str, elder_id: str) -> bool:
         elder = self.get_elder(elder_id)
@@ -112,10 +172,28 @@ class FirestoreService:
         fcm_token: str,
         platform: str = "ANDROID",
     ) -> str:
-        # One document per token so re-registering the same device is idempotent.
+        """Adds a person to a phone. It never replaces the people already on it.
+
+        One document per token, so re-registering the same device is
+        idempotent. The people it serves are a list: a phone on a shared side
+        table belongs to a household, not to one person. Writing a single
+        elder_id here used to mean pairing a second person silently unpaired the
+        first, who then stopped receiving reminders with nothing to show for it.
+        """
         ref = self.db.collection("devices").document(fcm_token[:200].replace("/", "_"))
+        existing = _doc(ref.get()) or {}
+
+        elder_ids = list(existing.get("elder_ids") or [])
+        # Documents written before devices could be shared carry a single id.
+        if existing.get("elder_id") and existing["elder_id"] not in elder_ids:
+            elder_ids.append(existing["elder_id"])
+        if elder_id not in elder_ids:
+            elder_ids.append(elder_id)
+
         ref.set({
-            "elder_id": elder_id,
+            "elder_ids": elder_ids,
+            # Kept in step for any reader still expecting one id.
+            "elder_id": elder_ids[0],
             "fcm_token": fcm_token,
             "platform": platform,
             "active": True,
@@ -123,15 +201,40 @@ class FirestoreService:
         })
         return ref.id
 
+    def unregister_device(self, elder_id: str, fcm_token: str) -> None:
+        """Takes one person off a phone, leaving anyone else on it alone."""
+        ref = self.db.collection("devices").document(fcm_token[:200].replace("/", "_"))
+        existing = _doc(ref.get())
+        if not existing:
+            return
+
+        remaining = [e for e in (existing.get("elder_ids") or []) if e != elder_id]
+
+        if not remaining:
+            ref.update({"active": False, "elder_ids": [], "elder_id": None})
+            return
+
+        ref.update({"elder_ids": remaining, "elder_id": remaining[0]})
+
     def get_device_tokens(self, elder_id: str) -> list[str]:
-        query = self.db.collection("devices").where(
-            filter=firestore.FieldFilter("elder_id", "==", elder_id)
+        queries = (
+            self.db.collection("devices").where(
+                filter=firestore.FieldFilter("elder_ids", "array_contains", elder_id)
+            ),
+            # Devices registered before sharing existed.
+            self.db.collection("devices").where(
+                filter=firestore.FieldFilter("elder_id", "==", elder_id)
+            ),
         )
-        return [
-            d.to_dict()["fcm_token"]
-            for d in query.stream()
-            if d.to_dict().get("active")
-        ]
+
+        tokens = []
+        for query in queries:
+            for snapshot in query.stream():
+                data = snapshot.to_dict()
+                if data.get("active") and data["fcm_token"] not in tokens:
+                    tokens.append(data["fcm_token"])
+
+        return tokens
 
     # ---------------- medications ----------------
 

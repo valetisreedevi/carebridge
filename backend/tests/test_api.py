@@ -1,34 +1,3 @@
-import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def client(db, monkeypatch):
-    """The whole app, wired to the in-memory Firestore."""
-    from app.api import deps
-    from app.services import notification_service as notif_module
-    from app.services.conversation_service import ConversationService
-    from app.services.firestore_service import FirestoreService
-    from app.services.medication_event_service import MedicationEventService
-    from app.services.reminder_service import ReminderService
-
-    monkeypatch.setattr(notif_module, "FCM_AVAILABLE", False)
-
-    for name, factory in (
-        ("firestore_service", lambda: FirestoreService(db)),
-        ("event_service", lambda: MedicationEventService(db)),
-        ("notification_service", lambda: notif_module.NotificationService(db)),
-        ("reminder_service", lambda: ReminderService(db)),
-        ("conversation_service", lambda: ConversationService(db)),
-        ("storage_service", lambda: None),
-    ):
-        monkeypatch.setattr(deps, name, factory)
-
-    from app.main import app
-
-    return TestClient(app)
-
-
 CAREGIVER = {"X-Caregiver-Id": "caregiver_1"}
 INTRUDER = {"X-Caregiver-Id": "caregiver_2"}
 
@@ -236,3 +205,192 @@ def test_worker_token_tolerates_trailing_whitespace(client):
         ).status_code
         == 403
     )
+
+
+def test_updating_an_elders_timezone(client):
+    elder_id = client.post(
+        "/api/elders",
+        json={"name": "Amma", "timezone": "Asia/Kolkata"},
+        headers=CAREGIVER,
+    ).json()["id"]
+
+    response = client.patch(
+        f"/api/elders/{elder_id}",
+        json={"timezone": "America/New_York"},
+        headers=CAREGIVER,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["timezone"] == "America/New_York"
+
+
+def test_a_timezone_the_server_cannot_resolve_is_rejected(client):
+    """Silently falling back to UTC would schedule every dose at the wrong hour."""
+    elder_id = client.post(
+        "/api/elders", json={"name": "Amma"}, headers=CAREGIVER
+    ).json()["id"]
+
+    response = client.patch(
+        f"/api/elders/{elder_id}",
+        json={"timezone": "Mars/Olympus_Mons"},
+        headers=CAREGIVER,
+    )
+
+    assert response.status_code == 422
+
+
+def test_creating_an_elder_with_an_unknown_timezone_is_rejected(client):
+    response = client.post(
+        "/api/elders",
+        json={"name": "Amma", "timezone": "Not/AZone"},
+        headers=CAREGIVER,
+    )
+
+    assert response.status_code == 422
+
+
+def test_another_caregiver_cannot_change_an_elders_timezone(client):
+    elder_id = client.post(
+        "/api/elders", json={"name": "Amma"}, headers=CAREGIVER
+    ).json()["id"]
+
+    response = client.patch(
+        f"/api/elders/{elder_id}",
+        json={"timezone": "America/New_York"},
+        headers=INTRUDER,
+    )
+
+    assert response.status_code == 403
+
+
+def test_a_patch_with_nothing_in_it_is_a_bad_request(client):
+    elder_id = client.post(
+        "/api/elders", json={"name": "Amma"}, headers=CAREGIVER
+    ).json()["id"]
+
+    response = client.patch(f"/api/elders/{elder_id}", json={}, headers=CAREGIVER)
+
+    assert response.status_code == 400
+
+
+def _elder_with_medication(client, time: str = "08:00") -> tuple[str, str]:
+    elder_id = client.post(
+        "/api/elders",
+        json={"name": "Amma", "timezone": "Asia/Kolkata"},
+        headers=CAREGIVER,
+    ).json()["id"]
+
+    medication_id = client.post(
+        "/api/medications",
+        json={
+            "elder_id": elder_id,
+            "name": "Eye Drops",
+            "dose": "1 drop",
+            "food_instruction": "AFTER_FOOD",
+            "schedule_times": [time],
+        },
+        headers=CAREGIVER,
+    ).json()["id"]
+
+    return elder_id, medication_id
+
+
+def test_removing_a_medication_clears_it_from_today(client, db):
+    """The row vanishing is the whole point: it is how remove looks."""
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=datetime.now(tz.utc),
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+
+    before = client.get(f"/api/elders/{elder_id}/today", headers=CAREGIVER).json()
+    assert any(i["medication_id"] == medication_id for i in before["items"])
+
+    assert client.delete(
+        f"/api/medications/{medication_id}", headers=CAREGIVER
+    ).status_code == 204
+
+    after = client.get(f"/api/elders/{elder_id}/today", headers=CAREGIVER).json()
+    assert [i for i in after["items"] if i["medication_id"] == medication_id] == []
+
+
+def test_the_elder_sees_every_dose_due_at_once(client, db):
+    """Two tablets at eight is normal; returning one hid the other until it
+    escalated behind the elder's back."""
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, first = _elder_with_medication(client, "08:00")
+    second = client.post(
+        "/api/medications",
+        json={
+            "elder_id": elder_id,
+            "name": "Metformin",
+            "dose": "1 tablet",
+            "food_instruction": "AFTER_FOOD",
+            "schedule_times": ["08:00"],
+        },
+        headers=CAREGIVER,
+    ).json()["id"]
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    for index, medication_id in enumerate((first, second)):
+        event_id = events.create_event(
+            medication_id=medication_id,
+            elder_id=elder_id,
+            scheduled_at=now,
+            retry_after_minutes=10,
+            max_attempts=2,
+        )
+        events.record_reminder_sent(event_id, now)
+
+    body = client.get(
+        "/api/reminders/active", headers={"X-Elder-Id": elder_id}
+    ).json()
+
+    assert body["remaining"] == 2
+    assert {r["medication_name"] for r in body["reminders"]} == {
+        "Eye Drops",
+        "Metformin",
+    }
+    # Older clients read this field and must still see a usable reminder.
+    assert body["reminder"] == body["reminders"][0]
+
+
+def test_a_removed_medication_disappears_from_the_elders_queue(client, db):
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, now)
+
+    client.delete(f"/api/medications/{medication_id}", headers=CAREGIVER)
+
+    body = client.get(
+        "/api/reminders/active", headers={"X-Elder-Id": elder_id}
+    ).json()
+
+    assert body["active"] is False
+    assert body["reminders"] == []

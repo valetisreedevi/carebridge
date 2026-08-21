@@ -43,9 +43,27 @@ ALLOWED_TRANSITIONS: dict[MedicationEventStatus, frozenset[MedicationEventStatus
     }),
     MedicationEventStatus.TAKEN: frozenset(),
     MedicationEventStatus.DECLINED: frozenset(),
-    MedicationEventStatus.ESCALATED: frozenset(),
+    # ESCALATED is the end of the dose but not of the story: the escalation
+    # ladder keeps working through ways to reach the caregiver, so the event
+    # stays live and removing the medicine has to be able to close it.
+    #
+    # A caregiver marking it taken is NOT here. That is an override of what the
+    # device knows, and it is guarded separately in confirm_by_caregiver so it
+    # stays visible rather than becoming a hole in this map.
+    MedicationEventStatus.ESCALATED: frozenset({MedicationEventStatus.CANCELLED}),
     MedicationEventStatus.CANCELLED: frozenset(),
 }
+
+
+# What a caregiver may vouch for. A dose the elder already answered is not on
+# the list: TAKEN needs no help, and DECLINED means they said no — overriding
+# that from another room is not a correction.
+CAREGIVER_CONFIRMABLE = frozenset({
+    MedicationEventStatus.PENDING,
+    MedicationEventStatus.REMINDER_SENT,
+    MedicationEventStatus.SNOOZED,
+    MedicationEventStatus.ESCALATED,
+})
 
 
 class InvalidTransition(Exception):

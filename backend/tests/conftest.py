@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -73,3 +74,30 @@ def seeded(firestore_service, db):
         "elder_id": elder_id,
         "medication_id": medication_id,
     }
+
+
+@pytest.fixture
+def client(db, monkeypatch):
+    """The whole app, wired to the in-memory Firestore."""
+    from app.api import deps
+    from app.services import notification_service as notif_module
+    from app.services.conversation_service import ConversationService
+    from app.services.firestore_service import FirestoreService
+    from app.services.medication_event_service import MedicationEventService
+    from app.services.reminder_service import ReminderService
+
+    monkeypatch.setattr(notif_module, "FCM_AVAILABLE", False)
+
+    for name, factory in (
+        ("firestore_service", lambda: FirestoreService(db)),
+        ("event_service", lambda: MedicationEventService(db)),
+        ("notification_service", lambda: notif_module.NotificationService(db)),
+        ("reminder_service", lambda: ReminderService(db)),
+        ("conversation_service", lambda: ConversationService(db)),
+        ("storage_service", lambda: None),
+    ):
+        monkeypatch.setattr(deps, name, factory)
+
+    from app.main import app
+
+    return TestClient(app)

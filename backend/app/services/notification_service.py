@@ -1,9 +1,17 @@
 import logging
+import smtplib
 from datetime import datetime, timezone
+from email.message import EmailMessage
 
+from app.config import get_settings
 from app.services.firestore_service import FirestoreService, get_db
 
 logger = logging.getLogger(__name__)
+
+BODY_TEMPLATE = (
+    "{message}" + "\n\n"
+    + "Open CareBridge to see the day and mark it handled." + "\n"
+)
 
 try:
     import firebase_admin
@@ -28,6 +36,7 @@ class NotificationService:
     def __init__(self, db=None):
         self.db = db or get_db()
         self.firestore = FirestoreService(self.db)
+        self.settings = get_settings()
 
     def _record(self, payload: dict) -> str:
         ref = self.db.collection("notifications").document()
@@ -57,6 +66,50 @@ class NotificationService:
             return response.success_count
         except Exception as exc:
             logger.exception("FCM send failed: %s", exc)
+            return 0
+
+    def _caregiver_emails(self, caregiver_ids: list[str]) -> list[str]:
+        addresses = []
+        for caregiver_id in caregiver_ids:
+            caregiver = self.firestore.get_caregiver(caregiver_id)
+            email = (caregiver or {}).get("email")
+            if email and email not in addresses:
+                addresses.append(email)
+        return addresses
+
+    def _email(self, addresses: list[str], subject: str, body: str) -> int:
+        """Sends one escalation email. Returns how many addresses it reached.
+
+        Unconfigured is not an error: the dispatch is still recorded, so a
+        deployment without SMTP behaves like one whose mail failed rather than
+        pretending the caregiver was told.
+        """
+        if not addresses:
+            return 0
+
+        if not self.settings.email_configured:
+            logger.warning(
+                "Email escalation not configured; %s address(es) not written to",
+                len(addresses),
+            )
+            return 0
+
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = self.settings.smtp_from or self.settings.smtp_user
+        message["To"] = ", ".join(addresses)
+        message.set_content(body)
+
+        try:
+            with smtplib.SMTP(
+                self.settings.smtp_host, self.settings.smtp_port, timeout=15
+            ) as server:
+                server.starttls()
+                server.login(self.settings.smtp_user, self.settings.smtp_password)
+                server.send_message(message)
+            return len(addresses)
+        except Exception as exc:
+            logger.exception("Escalation email failed: %s", exc)
             return 0
 
     def send_reminder(
@@ -105,23 +158,40 @@ class NotificationService:
         event: dict,
         reason: str,
         message: str,
+        channel: str = "push",
     ) -> dict:
-        caregiver_ids = elder.get("caregiver_ids") or []
+        """Tells the caregiver, by one channel, and records that it tried.
 
-        tokens: list[str] = []
-        for caregiver_id in caregiver_ids:
-            caregiver = self.firestore.get_caregiver(caregiver_id)
-            if caregiver:
-                tokens.extend(caregiver.get("fcm_tokens") or [])
+        The channel is chosen by the escalation ladder rather than here: this
+        only knows how to use each one and whether it worked.
+        """
+        caregiver_ids = elder.get("caregiver_ids") or []
 
         data = {
             "type": "CAREGIVER_ALERT",
             "reason": reason,
             "event_id": event["id"],
             "elder_id": elder["id"],
+            "channel": channel,
         }
 
-        delivered = self._push(tokens, title="CareBridge", body=message, data=data)
+        if channel == "email":
+            addresses = self._caregiver_emails(caregiver_ids)
+            delivered = self._email(
+                addresses,
+                subject=f"CareBridge: {elder['name']} — {medication['name']}",
+                body=BODY_TEMPLATE.format(message=message),
+            )
+            audience_count = len(addresses)
+        else:
+            tokens: list[str] = []
+            for caregiver_id in caregiver_ids:
+                caregiver = self.firestore.get_caregiver(caregiver_id)
+                if caregiver:
+                    tokens.extend(caregiver.get("fcm_tokens") or [])
+
+            delivered = self._push(tokens, title="CareBridge", body=message, data=data)
+            audience_count = len(tokens)
 
         notification_id = self._record({
             **data,

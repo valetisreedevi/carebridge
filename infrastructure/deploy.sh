@@ -18,6 +18,19 @@ GEMINI_MODEL="${GEMINI_MODEL:-gemini-3.6-flash}"
 # Firebase sign-in screen; until then AUTH_ENABLED=false is only safe
 # because the service itself is not publicly invokable.
 AUTH_ENABLED="${AUTH_ENABLED:-true}"
+# Turn on once the caregiver has clicked the link in their sign-up email;
+# flipping it while an account is unconfirmed locks that account out.
+REQUIRE_VERIFIED_EMAIL="${REQUIRE_VERIFIED_EMAIL:-false}"
+# Semicolon-separated: --set-env-vars claims the comma. This must be set here
+# rather than by hand, because --set-env-vars replaces the whole env block and
+# would otherwise drop it, leaving the web client blocked by CORS.
+# Cloud Run answers the web client on two hostnames: the project-number one
+# and an older hashed one. A visitor on the hostname that is not listed here
+# gets a browser that refuses every API call, so both are allowed.
+PROJECT_NUMBER_EARLY="$(gcloud projects describe "$PROJECT_ID" --format 'value(projectNumber)')"
+WEB_ORIGIN="${WEB_ORIGIN:-https://carebridge-web-${PROJECT_NUMBER_EARLY}.${REGION}.run.app}"
+WEB_ORIGIN_ALT="${WEB_ORIGIN_ALT:-$(gcloud run services describe carebridge-web   --region "$REGION" --project "$PROJECT_ID" --format 'value(status.url)' 2>/dev/null || true)}"
+CORS_ORIGINS_RAW="${CORS_ORIGINS_RAW:-${WEB_ORIGIN};${WEB_ORIGIN_ALT};http://localhost:5173;http://127.0.0.1:5173}"
 SERVICE_ACCOUNT="carebridge-api@${PROJECT_ID}.iam.gserviceaccount.com"
 SCHEDULER_SA="carebridge-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -88,14 +101,24 @@ gcloud secrets add-iam-policy-binding carebridge-worker-token \
   --role roles/secretmanager.secretAccessor \
   --project "$PROJECT_ID" --quiet >/dev/null
 
-echo "==> Deploying $SERVICE"
+# Who may call the service at all, which is separate from who the app thinks
+# you are. With AUTH_ENABLED the API verifies a Firebase token on every request,
+# so it can be reachable; without it the only thing standing between a stranger
+# and the data is Cloud Run itself, so it must not be.
+if [ "$AUTH_ENABLED" = "true" ]; then
+  INVOKER_FLAG=--allow-unauthenticated
+else
+  INVOKER_FLAG=--no-allow-unauthenticated
+fi
+
+echo "==> Deploying $SERVICE ($INVOKER_FLAG)"
 gcloud run deploy "$SERVICE" --quiet \
   --source backend \
   --region "$REGION" \
   --project "$PROJECT_ID" \
   --service-account "$SERVICE_ACCOUNT" \
-  --no-allow-unauthenticated \
-  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=${AUTH_ENABLED}" \
+  "$INVOKER_FLAG" \
+  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=${AUTH_ENABLED},REQUIRE_VERIFIED_EMAIL=${REQUIRE_VERIFIED_EMAIL},CORS_ORIGINS_RAW=${CORS_ORIGINS_RAW}" \
   --set-secrets "WORKER_TOKEN=carebridge-worker-token:latest" \
   --min-instances 0 \
   --max-instances 5 \

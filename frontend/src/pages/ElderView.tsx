@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, pairedElderId, type Reminder } from "../api/client";
+import { api, pairedElderIds, type Reminder } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 import PairDevice from "./PairDevice";
@@ -12,12 +12,17 @@ type Turn = { who: "elder" | "carebridge"; text: string };
 type Credential = "resolving" | "paired" | "unpaired";
 
 export default function ElderView() {
-  const [elderId, setElderId] = useState(pairedElderId());
+  const [elderIds, setElderIds] = useState<string[]>(pairedElderIds());
+  const elderId = elderIds[0] ?? null;
   const [credential, setCredential] = useState<Credential>(
     firebaseConfigured ? "resolving" : "paired",
   );
 
-  const [reminder, setReminder] = useState<Reminder | null>(null);
+  const [queue, setQueue] = useState<Reminder[]>([]);
+
+  // Whatever is at the front of the queue is the one being asked about. A
+  // morning is rarely one tablet, but it is always one decision at a time.
+  const reminder = queue[0] ?? null;
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -37,27 +42,32 @@ export default function ElderView() {
   // resolves would fetch with no credential and fail on every first load.
   useEffect(
     () =>
-      watchElder((user) => {
-        if (!firebaseConfigured) return;
+      watchElder(elderId ?? "", (user) => {
+        if (!firebaseConfigured || !elderId) return;
         setCredential(user ? "paired" : "unpaired");
       }),
-    [],
+    [elderId],
   );
 
   const ready = credential === "paired" && Boolean(elderId);
 
   const refresh = useCallback(async () => {
-    if (!ready || !elderId) return;
+    if (!ready || !elderIds.length) return;
 
     try {
-      const { reminder: next } = await api.activeReminder(elderId);
-      setReminder(next);
+      // One queue across everyone this phone is set up for, in time order, so
+      // a couple sharing a device are not asked to take turns with the screen.
+      const perPerson = await Promise.all(
+        elderIds.map((id) => api.activeReminder(id)),
+      );
+
+      setQueue(perPerson.flatMap((response) => response.reminders ?? []));
       setUnreachable(false);
       setEverLoaded(true);
     } catch {
       setUnreachable(true);
     }
-  }, [ready, elderId]);
+  }, [ready, elderIds]);
 
   useEffect(() => {
     if (!ready) return;
@@ -69,7 +79,7 @@ export default function ElderView() {
 
   // Load the photo and the caregiver's recording for whichever reminder is up.
   useEffect(() => {
-    if (!reminder || !elderId) {
+    if (!reminder) {
       setPhotoUrl(null);
       setAudioUrl(null);
       return;
@@ -81,7 +91,9 @@ export default function ElderView() {
     const load = async (path: string | null, set: (v: string) => void) => {
       if (!path) return;
       try {
-        const url = await api.mediaObjectUrl(path, elderId);
+        // Signed with the credential of whoever this reminder belongs to; on
+        // a shared phone the first person's token cannot read the second's.
+        const url = await api.mediaObjectUrl(path, reminder.elder_id);
         if (cancelled) return;
         if (url.startsWith("blob:")) created.push(url);
         set(url);
@@ -97,7 +109,7 @@ export default function ElderView() {
       cancelled = true;
       created.forEach(URL.revokeObjectURL);
     };
-  }, [reminder, elderId]);
+  }, [reminder]);
 
   // The caregiver's voice plays once per reminder, not on every poll.
   useEffect(() => {
@@ -120,14 +132,18 @@ export default function ElderView() {
 
   const send = useCallback(
     async (message: string) => {
-      if (!elderId || !reminder || busy) return;
+      if (!reminder || busy) return;
 
       setTurns((previous) => [...previous, { who: "elder", text: message }]);
       setBusy(true);
       setNotice(null);
 
       try {
-        const result = await api.chat(elderId, reminder.event_id, message);
+        const result = await api.chat(
+          reminder.elder_id,
+          reminder.event_id,
+          message,
+        );
         say(result.reply);
         await refresh();
       } catch {
@@ -136,7 +152,7 @@ export default function ElderView() {
         setBusy(false);
       }
     },
-    [elderId, reminder, busy, say, refresh],
+    [reminder, busy, say, refresh],
   );
 
   const toggleMic = useCallback(() => {
@@ -165,15 +181,15 @@ export default function ElderView() {
 
   const act = useCallback(
     async (action: "taken" | "snooze") => {
-      if (!elderId || !reminder || busy) return;
+      if (!reminder || busy) return;
       setBusy(true);
 
       try {
         if (action === "taken") {
-          await api.markTaken(reminder.event_id, elderId);
+          await api.markTaken(reminder.event_id, reminder.elder_id);
           say("Thank you. I have recorded it.");
         } else {
-          await api.snooze(reminder.event_id, elderId, 10);
+          await api.snooze(reminder.event_id, reminder.elder_id, 10);
           say("Alright, I will remind you again in ten minutes.");
         }
         await refresh();
@@ -183,7 +199,7 @@ export default function ElderView() {
         setBusy(false);
       }
     },
-    [elderId, reminder, busy, say, refresh],
+    [reminder, busy, say, refresh],
   );
 
   if (credential === "resolving") {
@@ -196,7 +212,7 @@ export default function ElderView() {
 
   if (credential === "unpaired" || !elderId) {
     if (firebaseConfigured) {
-      return <PairDevice onPaired={() => setElderId(pairedElderId())} />;
+      return <PairDevice onPaired={() => setElderIds(pairedElderIds())} />;
     }
     return (
       <main className="elder elder--calm">
@@ -242,6 +258,18 @@ export default function ElderView() {
   return (
     <main className="elder">
       <h1 className="elder__title">Medicine time</h1>
+
+      {/* On a phone set up for one person the name is noise. On a shared one
+          it is the difference between the right tablet and the wrong one. */}
+      {elderIds.length > 1 && reminder.elder_name && (
+        <p className="elder__who">{reminder.elder_name}</p>
+      )}
+
+      {queue.length > 1 && (
+        <p className="elder__count">
+          {queue.length - 1} more after this one
+        </p>
+      )}
 
       {photoUrl && <img className="elder__photo" src={photoUrl} alt="" />}
 

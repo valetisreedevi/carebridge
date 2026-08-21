@@ -3,25 +3,67 @@ import {
   friendlyAuthError,
   googleSignInEnabled,
   registerWithPassword,
+  sendPasswordReset,
   signInWithGoogle,
   signInWithPassword,
 } from "../api/firebase";
 
+type Mode = "in" | "up" | "reset";
+
+const HEADING: Record<Mode, string> = {
+  in: "Welcome back",
+  up: "Create your account",
+  reset: "Reset your password",
+};
+
+const SUBHEADING: Record<Mode, string> = {
+  in: "Keep track of a family member's medication, without having to ask.",
+  up: "It takes a minute. You will add the person you care for next.",
+  reset: "We will email you a link to choose a new password.",
+};
+
 export default function SignIn() {
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<Mode>("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const go = (next: Mode) => {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+    setConfirm("");
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // Caught here rather than by Firebase: a mistyped password on sign-up
+    // creates a real account nobody can get back into.
+    if (mode === "up" && password !== confirm) {
+      setError("The two passwords do not match.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
+    setNotice(null);
 
     try {
-      if (mode === "in") await signInWithPassword(email.trim(), password);
-      else await registerWithPassword(email.trim(), password);
+      if (mode === "in") {
+        await signInWithPassword(email.trim(), password);
+      } else if (mode === "up") {
+        await registerWithPassword(email.trim(), password);
+      } else {
+        await sendPasswordReset(email.trim());
+        setNotice(
+          "If that email has an account, a reset link is on its way. " +
+            "Check your spam folder too.",
+        );
+      }
     } catch (e) {
       setError(friendlyAuthError(e));
     } finally {
@@ -41,62 +83,138 @@ export default function SignIn() {
     }
   };
 
+  const action =
+    mode === "in" ? "Sign in" : mode === "up" ? "Create account" : "Email me a link";
+
   return (
     <main className="signin">
-      <h1>CareBridge</h1>
-      <p className="signin__sub">
-        Keep track of a family member's medication, without having to ask.
-      </p>
+      <div className="signin__card">
+        <div className="signin__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28">
+            <path
+              fill="currentColor"
+              d="M10 3h4v5h5v4h-5v5h-4v-5H5V8h5V3z"
+            />
+          </svg>
+        </div>
 
-      <form className="signin__form" onSubmit={submit}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-        </label>
+        <h1>{HEADING[mode]}</h1>
+        <p className="signin__sub">{SUBHEADING[mode]}</p>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === "in" ? "current-password" : "new-password"}
-            required
-            minLength={6}
-          />
-        </label>
+        <form className="signin__form" onSubmit={submit}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
+            />
+          </label>
 
-        {error && <p className="dash__error">{error}</p>}
+          {mode !== "reset" && (
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={mode === "in" ? "current-password" : "new-password"}
+                required
+                minLength={8}
+              />
+              {mode === "up" && (
+                <small className="signin__hint">At least 8 characters.</small>
+              )}
+            </label>
+          )}
 
-        <button type="submit" className="signin__primary btn-primary" disabled={busy}>
-          {busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}
-        </button>
-      </form>
+          {mode === "up" && (
+            <label>
+              Confirm password
+              <input
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                required
+                minLength={8}
+              />
+            </label>
+          )}
 
-      {googleSignInEnabled && (
-        <button type="button" onClick={google} disabled={busy}>
-          Continue with Google
-        </button>
-      )}
+          {error && (
+            <p className="signin__error" role="alert">
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p className="signin__notice" role="status">
+              {notice}
+            </p>
+          )}
 
-      <button
-        type="button"
-        className="signin__switch"
-        onClick={() => {
-          setMode(mode === "in" ? "up" : "in");
-          setError(null);
-        }}
-      >
-        {mode === "in"
-          ? "No account yet? Create one"
-          : "Already have an account? Sign in"}
-      </button>
+          <button
+            type="submit"
+            className="signin__primary btn-primary"
+            disabled={busy}
+          >
+            {busy ? "One moment…" : action}
+          </button>
+        </form>
+
+        {mode === "in" && (
+          <button
+            type="button"
+            className="signin__link"
+            onClick={() => go("reset")}
+          >
+            Forgot your password?
+          </button>
+        )}
+
+        {googleSignInEnabled && mode !== "reset" && (
+          <>
+            <div className="signin__or">
+              <span>or</span>
+            </div>
+            <button
+              type="button"
+              className="signin__google"
+              onClick={google}
+              disabled={busy}
+            >
+              Continue with Google
+            </button>
+          </>
+        )}
+
+        <p className="signin__switch">
+          {mode === "in" && (
+            <>
+              No account yet?{" "}
+              <button type="button" onClick={() => go("up")}>
+                Create one
+              </button>
+            </>
+          )}
+          {mode === "up" && (
+            <>
+              Already have an account?{" "}
+              <button type="button" onClick={() => go("in")}>
+                Sign in
+              </button>
+            </>
+          )}
+          {mode === "reset" && (
+            <button type="button" onClick={() => go("in")}>
+              Back to sign in
+            </button>
+          )}
+        </p>
+      </div>
     </main>
   );
 }
