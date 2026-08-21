@@ -5,6 +5,7 @@ from app.api import deps
 from app.api.schemas import (
     CreateMedicationRequest,
     MarkTakenRequest,
+    RemindNowRequest,
     UpdateMedicationRequest,
 )
 from app.services.storage_service import AUDIO_TYPES, IMAGE_TYPES
@@ -133,16 +134,25 @@ def delete_medication(
 @router.post("/medications/{medication_id}/remind-now")
 def remind_now(
     medication_id: str,
+    request: RemindNowRequest | None = None,
     caregiver_id: str = Depends(current_caregiver_id),
 ):
-    """Sends a medication's reminder immediately instead of waiting for it.
+    """Rings one of today's scheduled doses again, instead of waiting for it.
+
+    The dose is named by the row the caregiver pressed. It used to raise an
+    event stamped with the current minute, which is not a time anybody was
+    prescribed, so every press added a dose that never existed to today's list
+    and to the week's adherence.
 
     This used to live at /api/demo/trigger-reminder. It is a real feature the
     dashboard offers, and a door marked "demo" has no business standing open in
     front of medical data.
     """
     medication = _authorized_medication(medication_id, caregiver_id)
-    return deps.reminder_service().remind_immediately(medication)
+
+    return deps.reminder_service().remind_immediately(
+        medication, local_time=request.local_time if request else None
+    )
 
 
 @router.post("/medications/{medication_id}/mark-taken")

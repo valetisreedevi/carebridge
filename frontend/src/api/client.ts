@@ -340,10 +340,11 @@ export const api = {
       `/api/elders/${elderId}/history?days=${days}`,
     ),
 
-  triggerReminder: (medicationId: string) =>
-    request<{ event_id: string }>(
+  /** Rings one of today's scheduled doses again. The time says which. */
+  triggerReminder: (medicationId: string, localTime: string) =>
+    request<{ event_id: string; attempt: number; reached_a_phone: boolean }>(
       `/api/medications/${medicationId}/remind-now`,
-      { method: "POST" },
+      { method: "POST", body: { local_time: localTime } },
     ),
 
   unpairDevice: (elderId: string, fcmToken: string) =>

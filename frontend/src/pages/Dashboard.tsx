@@ -322,19 +322,23 @@ export default function Dashboard() {
     }
   };
 
-  const trigger = async (medicationId: string) => {
+  const trigger = async (medicationId: string, localTime: string) => {
     // Two steps rather than a dialog. This lights up a phone, plays a recorded
     // voice and can wake somebody; Remove asks before it acts and this used
     // not to, which had the confirmation on the reversible action only.
-    if (confirmingRemind !== medicationId) {
-      setConfirmingRemind(medicationId);
+    //
+    // Armed per row, not per medicine: one tablet taken morning and night is
+    // two rows, and keying on the medicine armed both of them at once.
+    const row = `${medicationId}-${localTime}`;
+    if (confirmingRemind !== row) {
+      setConfirmingRemind(row);
       return;
     }
 
     setConfirmingRemind(null);
     setOpenMenu(null);
     try {
-      await api.triggerReminder(medicationId);
+      await api.triggerReminder(medicationId, localTime);
       await loadDay();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not send the reminder");
@@ -698,15 +702,15 @@ export default function Dashboard() {
                         <button
                           type="button"
                           className={
-                            confirmingRemind === item.medication_id
+                            confirmingRemind === rowKey(item)
                               ? "btn-danger"
                               : "btn-quiet"
                           }
-                          onClick={() => trigger(item.medication_id)}
+                          onClick={() => trigger(item.medication_id, item.local_time)}
                           onBlur={() => setConfirmingRemind(null)}
                           title="Send this reminder now instead of waiting"
                         >
-                          {confirmingRemind === item.medication_id
+                          {confirmingRemind === rowKey(item)
                             ? "Send it now?"
                             : "Remind now"}
                         </button>
@@ -733,9 +737,9 @@ export default function Dashboard() {
                             {needsAttention(item) && (
                               <button
                                 type="button"
-                                onClick={() => trigger(item.medication_id)}
+                                onClick={() => trigger(item.medication_id, item.local_time)}
                               >
-                                {confirmingRemind === item.medication_id
+                                {confirmingRemind === rowKey(item)
                                   ? "Send it now?"
                                   : "Remind now"}
                               </button>

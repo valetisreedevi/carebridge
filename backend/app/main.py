@@ -15,6 +15,7 @@ from app.api import (
 )
 from app.config import get_settings
 from app.models.medication_event import InvalidTransition
+from app.services.reminder_service import NoSuchDose
 
 logging.basicConfig(level=logging.INFO)
 
@@ -45,6 +46,12 @@ app.include_router(internal.router)
 
 @app.exception_handler(InvalidTransition)
 def invalid_transition_handler(request: Request, exc: InvalidTransition):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(NoSuchDose)
+def no_such_dose_handler(request: Request, exc: NoSuchDose):
+    """A refusal the caregiver can act on, not a server error."""
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 

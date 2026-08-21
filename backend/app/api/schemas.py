@@ -131,6 +131,17 @@ class MarkTakenRequest(BaseModel):
     local_time: str = Field(pattern=TIME_PATTERN.pattern)
 
 
+class RemindNowRequest(BaseModel):
+    """Which of today's scheduled doses to ring about.
+
+    The dashboard knows the row that was pressed. Without it the nearest
+    scheduled time is chosen, but never the current minute - that is not a
+    dose anybody was prescribed.
+    """
+
+    local_time: str | None = Field(default=None, pattern=TIME_PATTERN.pattern)
+
+
 class AcceptInviteRequest(BaseModel):
     code: str = Field(min_length=6, max_length=32)
 

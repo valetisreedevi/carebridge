@@ -13,6 +13,16 @@ from app.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
+
+class NoSuchDose(Exception):
+    """Asked to ring a dose that is not on today's schedule."""
+
+    def __init__(self, medication_name: str):
+        super().__init__(
+            f"{medication_name} has no dose scheduled today to remind about."
+        )
+
+
 # How far ahead of a scheduled time an event is created, so the first reminder
 # fires promptly rather than up to a minute late.
 MATERIALISE_AHEAD = timedelta(minutes=5)
@@ -416,24 +426,67 @@ class ReminderService:
         )
         return event_id
 
-    def remind_immediately(self, medication: dict) -> dict:
-        """Rings the elder's phone about one medicine, now.
+    def _occurrence_to_ring(
+        self,
+        medication: dict,
+        elder: dict,
+        now: datetime,
+        local_time: str | None,
+    ) -> datetime | None:
+        """Which of today's scheduled doses "remind now" is about.
 
-        Deliberately not a worker pass. Running process_due_events here acted on
-        every household whose dose happened to be due at that moment — sending
-        their reminders and advancing their attempt counts off the back of one
-        caregiver's button — and handed their names and medicines back in the
-        response. A caregiver's action touches their own elder or nothing.
+        Named explicitly by the dashboard, which knows the row that was
+        pressed. Without one, the nearest scheduled time to now — never the
+        current minute, which is not a dose anybody was prescribed.
+        """
+        occurrences = self._occurrences_today(medication, elder, now)
+        if not occurrences:
+            return None
+
+        if local_time:
+            tz = _zone(elder.get("timezone"))
+            for occurrence in occurrences:
+                if occurrence.astimezone(tz).strftime("%H:%M") == local_time:
+                    return occurrence
+            return None
+
+        return min(occurrences, key=lambda occurrence: abs(occurrence - now))
+
+    def remind_immediately(
+        self,
+        medication: dict,
+        local_time: str | None = None,
+    ) -> dict:
+        """Rings the elder's phone about one of today's doses, now.
+
+        It used to raise an event stamped with the current minute. That minute
+        is not a time anybody was prescribed, so every press invented a dose:
+        an extra row in today's list, an extra unit in the "N of M taken"
+        count, and an extra entry in the week's adherence. Pressing it three
+        times while testing produced three tablets that never existed.
+
+        Deliberately not a worker pass either. Running process_due_events here
+        acted on every household whose dose happened to be due at that moment
+        and handed their names back in the response.
         """
         elder = self.firestore.get_elder(medication["elder_id"])
         if not elder:
             raise LookupError(medication["elder_id"])
 
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        event_id = self._event_for(medication, now)
-        event = self.events.get_event(event_id)
+        occurrence = self._occurrence_to_ring(medication, elder, now, local_time)
 
-        return {"event_id": event_id, **self._remind(event, elder, medication, now)}
+        if occurrence is None:
+            raise NoSuchDose(medication.get("name") or "That medicine")
+
+        event_id = self._event_for(medication, occurrence)
+        event = self.events.get_event(event_id)
+        reachable = bool(self.firestore.get_device_tokens(elder["id"]))
+
+        return {
+            "event_id": event_id,
+            **self._remind(event, elder, medication, now, True, reachable),
+        }
 
     def confirm_on_behalf(
         self,
