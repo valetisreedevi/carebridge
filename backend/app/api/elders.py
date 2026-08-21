@@ -340,6 +340,9 @@ def get_today(
             "status": event["status"],
             "attempt": event.get("attempt", 0),
             "max_attempts": event.get("max_attempts"),
+            # False means no reminder physically left the building, whatever
+            # the attempt count says.
+            "reached_a_phone": bool(event.get("reached_a_phone")),
             "confirmed_at": event.get("confirmed_at"),
             "acknowledged_at": event.get("acknowledged_at"),
             "escalated_at": event.get("escalated_at"),
@@ -365,6 +368,7 @@ def get_today(
                 "status": _unmaterialised_status(value, local_now),
                 "attempt": 0,
                 "max_attempts": medication.get("max_attempts"),
+                "reached_a_phone": True,
                 "confirmed_at": None,
                 "acknowledged_at": None,
                 "escalated_at": None,

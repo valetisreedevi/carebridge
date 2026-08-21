@@ -195,6 +195,8 @@ export type DayItem = {
   status: string;
   attempt: number;
   max_attempts: number | null;
+  /** False when no reminder physically left the building. */
+  reached_a_phone: boolean;
   confirmed_at: string | null;
   acknowledged_at: string | null;
 };
@@ -349,6 +351,18 @@ export const api = {
       `/api/devices/${elderId}?fcm_token=${encodeURIComponent(fcmToken)}`,
       { method: "DELETE" },
     ),
+
+  listDevices: (elderId: string) =>
+    request<
+      {
+        device_id: string;
+        platform: string | null;
+        label: string | null;
+        paired_at: string | null;
+        last_seen_at: string | null;
+        shared_with: number;
+      }[]
+    >(`/api/elders/${elderId}/devices`),
 
   signOutDevices: (elderId: string) =>
     request<{ elder_name: string; devices_signed_out: number }>(

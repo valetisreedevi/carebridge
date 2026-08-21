@@ -496,6 +496,18 @@ textarea:focus {
   color: var(--ink-soft);
 }
 
+/* A household with no phone paired: nothing can reach them, and every
+   reminder is being recorded as sent to nobody. */
+.dash__nophone {
+  margin: 1rem 0 0;
+  padding: 0.8rem 1rem;
+  border-left: 3px solid var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad);
+  font-size: 0.95rem;
+  border-radius: var(--radius-sm);
+}
+
 /* Said before the fields, not beside them: by the time someone reaches the
    time input they are already thinking in their own afternoon. */
 .medform__zone {

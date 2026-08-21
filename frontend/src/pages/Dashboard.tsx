@@ -67,6 +67,16 @@ const FOOD_LABEL: Record<string, string> = {
 };
 
 /** A row where the useful action is recording the dose, not chasing it. */
+/** No reminder physically went anywhere, whatever the attempt count says. */
+function wentNowhere(item: DayItem): boolean {
+  return (
+    item.reached_a_phone === false &&
+    item.status !== "UPCOMING" &&
+    item.status !== "TAKEN" &&
+    item.status !== "CANCELLED"
+  );
+}
+
 function needsAttention(item: DayItem): boolean {
   return (
     item.status === "ESCALATED" ||
@@ -225,6 +235,7 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryDay[]>([]);
+  const [phones, setPhones] = useState<number | null>(null);
   const [confirmingRemind, setConfirmingRemind] = useState<string | null>(null);
   const [confirmingSignOut, setConfirmingSignOut] = useState<string | null>(null);
   const [signOutResult, setSignOutResult] = useState<string | null>(null);
@@ -253,16 +264,18 @@ export default function Dashboard() {
   const loadDay = useCallback(async () => {
     if (!selected) return;
     try {
-      const [day, alertList, meds, past] = await Promise.all([
+      const [day, alertList, meds, past, devices] = await Promise.all([
         api.today(selected),
         api.alerts(),
         api.listMedications(selected),
         api.history(selected, 7),
+        api.listDevices(selected),
       ]);
       setItems(day.items);
       setAlerts(alertList);
       setMedications(meds.filter((m) => m.active !== false));
       setHistory(past.days);
+      setPhones(devices.length);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load");
     }
@@ -451,6 +464,16 @@ export default function Dashboard() {
         </p>
 
         {items.length > 0 && <Progress items={items} />}
+
+        {/* Said before any dose is due, not after one has quietly failed.
+            With no phone set up nothing can reach her, and every reminder is
+            recorded as sent to nobody. */}
+        {phones === 0 && elder && (
+          <p className="dash__nophone">
+            No phone is set up for {elder.name}, so reminders cannot reach her.
+            Get a pairing code below and enter it on her phone.
+          </p>
+        )}
       </header>
 
       {error && (
@@ -639,12 +662,21 @@ export default function Dashboard() {
                     <span className="schedule__status">
                       {item.acknowledged_at
                         ? "You said you have it"
-                        : (STATUS_LABEL[item.status] ?? item.status)}
-                      {item.attempt > 0 && item.status !== "TAKEN" && (
-                        <small>
-                          reminder {item.attempt} of {item.max_attempts}
-                        </small>
-                      )}
+                        : wentNowhere(item)
+                          ? "Not reminded — no phone set up"
+                          : (STATUS_LABEL[item.status] ?? item.status)}
+                      {/* The attempt count is a count of tries, not of doses
+                          she declined to answer. Showing "2 of 2" beside a
+                          household with no phone reads as her ignoring it. */}
+                      {item.attempt > 0 &&
+                        item.status !== "TAKEN" &&
+                        (wentNowhere(item) ? (
+                          <small>nothing was delivered</small>
+                        ) : (
+                          <small>
+                            reminder {item.attempt} of {item.max_attempts}
+                          </small>
+                        ))}
                     </span>
 
                     {/* One action visible, ranked by what this row needs, and

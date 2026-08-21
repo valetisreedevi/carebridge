@@ -102,12 +102,17 @@ class MedicationEventService:
         self,
         event_id: str,
         now: datetime | None = None,
+        reached: bool = True,
     ) -> dict:
         """Called by the worker after a reminder is dispatched.
 
         The retry is measured from the worker's clock, not wall-clock time, so
         a run processing a backlog schedules retries relative to the reminder
         it just sent.
+
+        `reached` records whether there was any phone to send to. It only ever
+        goes from false to true: a dose reminded once while a phone was paired
+        was genuinely asked about, whatever happened afterwards.
         """
         now = now or datetime.now(timezone.utc)
 
@@ -132,6 +137,7 @@ class MedicationEventService:
                 "attempt": attempt,
                 "last_attempt_at": now,
                 "next_attempt_at": now + timedelta(minutes=retry_after),
+                "reached_a_phone": bool(data.get("reached_a_phone")) or reached,
             }
             transaction.update(ref, updates)
             return {"id": event_id, **data, **updates}

@@ -48,7 +48,12 @@ def reminders(db, monkeypatch):
 
 @pytest.fixture
 def seeded(firestore_service, db):
-    """A caregiver, an elder in Asia/Kolkata, and one 08:00 medication."""
+    """A household that is properly set up: caregiver, elder, medicine, phone.
+
+    The phone matters. Without a registered device nothing can be delivered,
+    and the worker now says so rather than reporting the dose as unanswered —
+    which is a different scenario, and has its own tests.
+    """
     firestore_service.upsert_caregiver("caregiver_1", name="Family Member")
 
     elder_id = firestore_service.create_elder(
@@ -68,6 +73,8 @@ def seeded(firestore_service, db):
         "retry_after_minutes": 10,
         "max_attempts": 2,
     })
+
+    firestore_service.register_device(elder_id, "fcm-token-on-ammas-phone")
 
     return {
         "caregiver_id": "caregiver_1",

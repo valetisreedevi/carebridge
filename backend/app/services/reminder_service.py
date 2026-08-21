@@ -149,6 +149,11 @@ class ReminderService:
         # only wakes the device, which then fetches the whole queue.
         already_alerted: set[str] = set()
 
+        # Whether there is anywhere to send at all, asked once per person
+        # rather than per dose. Only the first event of a batch pushes, so the
+        # others cannot learn this from their own send.
+        reachable: dict[str, bool] = {}
+
         for event in self.events.get_due_events(now):
             status = MedicationEventStatus(event["status"])
             attempt = event.get("attempt", 0)
@@ -189,7 +194,17 @@ class ReminderService:
             else:
                 alert = elder["id"] not in already_alerted
                 already_alerted.add(elder["id"])
-                reminded.append(self._remind(event, elder, medication, now, alert))
+
+                if elder["id"] not in reachable:
+                    reachable[elder["id"]] = bool(
+                        self.firestore.get_device_tokens(elder["id"])
+                    )
+
+                reminded.append(
+                    self._remind(
+                        event, elder, medication, now, alert, reachable[elder["id"]]
+                    )
+                )
 
         return {
             "processed_at": now.isoformat(),
@@ -229,17 +244,23 @@ class ReminderService:
         medication: dict,
         now: datetime,
         alert: bool = True,
+        reachable: bool = True,
     ) -> dict:
         """Records an attempt, and optionally rings the phone about it.
 
         Every due dose still counts as reminded — each keeps its own attempt
         count and escalates on its own — but only the first of a batch makes a
         sound.
+
+        Whether anything actually left the building is remembered on the event.
+        A household with no phone set up still runs the full count and then
+        tells the family she "has not confirmed", which reads as a person
+        ignoring her tablets when the truth is that nobody ever asked her.
         """
         if alert:
             self.notifications.send_reminder(elder, medication, event)
 
-        updated = self.events.record_reminder_sent(event["id"], now)
+        updated = self.events.record_reminder_sent(event["id"], now, reached=reachable)
 
         return {
             "event_id": event["id"],
@@ -247,6 +268,7 @@ class ReminderService:
             "medication": medication["name"],
             "attempt": updated["attempt"],
             "alerted": alert,
+            "reached_a_phone": updated["reached_a_phone"],
             "next_attempt_at": updated["next_attempt_at"].isoformat(),
         }
 
@@ -290,7 +312,7 @@ class ReminderService:
             elder,
             medication,
             event,
-            reason="NOT_CONFIRMED",
+            reason=event.get("escalation_reason") or "NOT_CONFIRMED",
             message=message,
             channel=channels[level],
         )
@@ -303,6 +325,7 @@ class ReminderService:
             "elder": elder["name"],
             "medication": medication["name"],
             "channel": channels[level],
+            "reason": event.get("escalation_reason") or "NOT_CONFIRMED",
             "message": message,
         }
 
@@ -320,7 +343,20 @@ class ReminderService:
         # Wording matters: no response is "not confirmed", never "not taken".
         # Someone who kept snoozing did answer, so they are described honestly
         # rather than lumped in with silence.
-        if status is MedicationEventStatus.SNOOZED:
+        reason = "NOT_CONFIRMED"
+
+        if not event.get("reached_a_phone"):
+            # Nothing was ever delivered, so she was never asked. Reporting
+            # this as an unanswered reminder sends the family to blame a person
+            # for a phone that was never set up — the exact misunderstanding
+            # CareBridge exists to remove.
+            reason = "UNREACHABLE"
+            message = (
+                f"CareBridge could not reach {elder['name']}'s phone, so the "
+                f"{when} {medication['name']} was never asked about. "
+                "Check the phone is set up."
+            )
+        elif status is MedicationEventStatus.SNOOZED:
             message = (
                 f"{elder['name']} has put off the {when} {medication['name']} "
                 f"{event.get('snooze_count', 0)} times and still has not taken it."
@@ -338,13 +374,15 @@ class ReminderService:
 
         self.events.escalate_event(event["id"], self._next_step_at(0, now))
         # Kept so a later rung says the same thing the first one did.
-        self.events._ref(event["id"]).update({"escalation_message": message})
+        self.events._ref(event["id"]).update(
+            {"escalation_message": message, "escalation_reason": reason}
+        )
 
         self.notifications.notify_caregiver(
             elder,
             medication,
             event,
-            reason="NOT_CONFIRMED",
+            reason=reason,
             message=message,
             channel=channels[0] if channels else "push",
         )
@@ -354,6 +392,7 @@ class ReminderService:
             "elder": elder["name"],
             "medication": medication["name"],
             "channel": channels[0] if channels else "push",
+            "reason": reason,
             "message": message,
         }
 
