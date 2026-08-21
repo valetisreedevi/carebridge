@@ -5,6 +5,8 @@ person used to overwrite the first, who then stopped receiving reminders with
 no warning anywhere — the failure a family would only notice by missing doses.
 """
 
+from app.services.firestore_service import _device_doc_id
+
 TOKEN = "fcm-token-on-the-shared-side-table"
 
 
@@ -19,20 +21,22 @@ def test_a_second_person_does_not_displace_the_first(firestore_service):
     assert firestore_service.get_device_tokens(nanna) == [TOKEN]
 
 
-def test_the_same_person_registering_twice_is_not_counted_twice(firestore_service, db):
+def test_the_same_person_registering_twice_is_not_counted_twice(firestore_service):
     amma = firestore_service.create_elder(name="Amma", caregiver_id="c1")
 
     firestore_service.register_device(elder_id=amma, fcm_token=TOKEN)
     firestore_service.register_device(elder_id=amma, fcm_token=TOKEN)
 
-    device = db.collection("devices").document(TOKEN).get().to_dict()
-    assert device["elder_ids"] == [amma]
+    assert firestore_service.get_device_tokens(amma) == [TOKEN]
+    devices = firestore_service.list_devices_for_elder(amma)
+    assert len(devices) == 1
+    assert devices[0]["shared_with"] == 0
 
 
 def test_a_device_registered_before_sharing_keeps_working(firestore_service, db):
     """Old documents carry a single elder_id and no list."""
     amma = firestore_service.create_elder(name="Amma", caregiver_id="c1")
-    db.collection("devices").document(TOKEN).set({
+    db.collection("devices").document(_device_doc_id(TOKEN)).set({
         "elder_id": amma,
         "fcm_token": TOKEN,
         "platform": "ANDROID",
