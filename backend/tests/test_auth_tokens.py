@@ -13,7 +13,12 @@ def signed_in(monkeypatch):
     claims: dict = {}
 
     def _settings(**overrides):
-        return Settings(auth_enabled=True, **overrides)
+        # A real worker token, because auth_enabled refuses to start with the
+        # published placeholder. These tests are about who a token is, not
+        # about deployment configuration.
+        return Settings(
+            auth_enabled=True, worker_token="test-worker-token", **overrides
+        )
 
     monkeypatch.setattr(auth_module, "FIREBASE_AVAILABLE", True)
     monkeypatch.setattr(

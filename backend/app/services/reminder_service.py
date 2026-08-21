@@ -366,15 +366,23 @@ class ReminderService:
         return event_id
 
     def remind_immediately(self, medication: dict) -> dict:
-        """Rings the elder's phone about one medicine, now."""
+        """Rings the elder's phone about one medicine, now.
+
+        Deliberately not a worker pass. Running process_due_events here acted on
+        every household whose dose happened to be due at that moment — sending
+        their reminders and advancing their attempt counts off the back of one
+        caregiver's button — and handed their names and medicines back in the
+        response. A caregiver's action touches their own elder or nothing.
+        """
         elder = self.firestore.get_elder(medication["elder_id"])
         if not elder:
             raise LookupError(medication["elder_id"])
 
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         event_id = self._event_for(medication, now)
+        event = self.events.get_event(event_id)
 
-        return {"event_id": event_id, **self.process_due_events(now)}
+        return {"event_id": event_id, **self._remind(event, elder, medication, now)}
 
     def confirm_on_behalf(
         self,

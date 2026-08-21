@@ -83,6 +83,10 @@ class NotificationService:
         Unconfigured is not an error: the dispatch is still recorded, so a
         deployment without SMTP behaves like one whose mail failed rather than
         pretending the caregiver was told.
+
+        One connection, one message per recipient. A care team can include a
+        paid carer or a neighbour invited for a fortnight, and putting them all
+        in one To: header introduces them to each other.
         """
         if not addresses:
             return 0
@@ -94,23 +98,30 @@ class NotificationService:
             )
             return 0
 
-        message = EmailMessage()
-        message["Subject"] = subject
-        message["From"] = self.settings.smtp_from or self.settings.smtp_user
-        message["To"] = ", ".join(addresses)
-        message.set_content(body)
-
+        delivered = 0
         try:
             with smtplib.SMTP(
                 self.settings.smtp_host, self.settings.smtp_port, timeout=15
             ) as server:
                 server.starttls()
                 server.login(self.settings.smtp_user, self.settings.smtp_password)
-                server.send_message(message)
-            return len(addresses)
+
+                for address in addresses:
+                    message = EmailMessage()
+                    message["Subject"] = subject
+                    message["From"] = self.settings.smtp_from or self.settings.smtp_user
+                    message["To"] = address
+                    message.set_content(body)
+
+                    try:
+                        server.send_message(message)
+                        delivered += 1
+                    except Exception as exc:
+                        logger.warning("Escalation email to one address failed: %s", exc)
         except Exception as exc:
             logger.exception("Escalation email failed: %s", exc)
-            return 0
+
+        return delivered
 
     def send_reminder(
         self,
@@ -179,7 +190,12 @@ class NotificationService:
             addresses = self._caregiver_emails(caregiver_ids)
             delivered = self._email(
                 addresses,
-                subject=f"CareBridge: {elder['name']} — {medication['name']}",
+                # No medicine in the subject. A subject line shows on a lock
+                # screen, in a preview pane and in relay logs, and "Margaret —
+                # Metformin" tells everyone who glances at the phone what she
+                # is being treated for. The name is enough to know it matters;
+                # what it is about belongs in the body.
+                subject=f"CareBridge: {elder['name']} needs a check",
                 body=BODY_TEMPLATE.format(message=message),
             )
             audience_count = len(addresses)

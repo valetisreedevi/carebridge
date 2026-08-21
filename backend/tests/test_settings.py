@@ -1,4 +1,6 @@
-from app.config.settings import Settings
+import pytest
+
+from app.config.settings import DEV_WORKER_TOKEN, Settings
 
 
 def test_worker_token_from_env_is_trimmed(monkeypatch):
@@ -47,3 +49,28 @@ def test_cors_origins_default_covers_local_development(monkeypatch):
     monkeypatch.delenv("CORS_ORIGINS_RAW", raising=False)
 
     assert "http://localhost:5173" in Settings().cors_origins
+
+
+def test_the_placeholder_worker_token_is_fine_locally(monkeypatch):
+    """Local runs and demos have no Secret Manager and need none."""
+    monkeypatch.delenv("WORKER_TOKEN", raising=False)
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+
+    assert Settings().worker_token == DEV_WORKER_TOKEN
+
+
+def test_the_placeholder_worker_token_refuses_to_deploy(monkeypatch):
+    """Guarding the worker endpoint with a string published in this repository
+    is not a configuration mistake that should produce a healthy service."""
+    monkeypatch.delenv("WORKER_TOKEN", raising=False)
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+
+    with pytest.raises(ValueError, match="development placeholder"):
+        Settings()
+
+
+def test_a_real_worker_token_starts_normally(monkeypatch):
+    monkeypatch.setenv("WORKER_TOKEN", "9f2c1a" * 8)
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+
+    assert Settings().worker_token == "9f2c1a" * 8

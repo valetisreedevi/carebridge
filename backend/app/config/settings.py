@@ -3,10 +3,13 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+# Published in this repository, so it is a placeholder rather than a secret.
+DEV_WORKER_TOKEN = "local-worker-token"
 
 
 class Settings(BaseSettings):
@@ -27,8 +30,10 @@ class Settings(BaseSettings):
         os.getenv("REQUIRE_VERIFIED_EMAIL", "false").lower() == "true"
     )
 
-    # Shared secret Cloud Scheduler sends on the internal worker endpoint.
-    worker_token: str = os.getenv("WORKER_TOKEN", "local-worker-token")
+    # Shared secret Cloud Scheduler sends on the internal worker endpoint. The
+    # default is fine locally and must never survive a deploy — see
+    # _refuse_the_default_worker_token below.
+    worker_token: str = os.getenv("WORKER_TOKEN", DEV_WORKER_TOKEN)
 
     default_retry_after_minutes: int = 10
     default_max_attempts: int = 2
@@ -93,6 +98,23 @@ class Settings(BaseSettings):
             for origin in self.cors_origins_raw.replace(";", ",").split(",")
             if origin.strip()
         ]
+
+    @model_validator(mode="after")
+    def _refuse_the_default_worker_token(self) -> "Settings":
+        """Stops a real deployment guarding the worker with a published string.
+
+        deploy.sh wires the Secret Manager value in, but nothing enforces that:
+        a rollback, a hand-run gcloud command or a second environment can all
+        miss it, and the service would come up healthy with the placeholder
+        from this file standing in for the secret. Failing at startup is the
+        only version of this that cannot be missed.
+        """
+        if self.auth_enabled and self.worker_token == DEV_WORKER_TOKEN:
+            raise ValueError(
+                "WORKER_TOKEN is still the development placeholder. Set it from "
+                "Secret Manager before deploying with AUTH_ENABLED=true."
+            )
+        return self
 
 
 @lru_cache
