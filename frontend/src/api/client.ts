@@ -342,6 +342,12 @@ export const api = {
       { method: "DELETE" },
     ),
 
+  signOutDevices: (elderId: string) =>
+    request<{ elder_name: string; devices_signed_out: number }>(
+      `/api/elders/${elderId}/devices/sign-out`,
+      { method: "POST" },
+    ),
+
   activeReminder: (elderId: string) =>
     request<{
       active: boolean;

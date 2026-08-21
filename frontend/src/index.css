@@ -504,6 +504,18 @@ textarea:focus {
   line-height: 1.7;
 }
 
+/* Set apart from pairing: everything above adds a phone, this takes them all
+   away, and the two must not be one gesture apart by accident. */
+.pair__lost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.6rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
 /* ---------------- sign in ----------------
  * One card, centred on a tinted page. The form is the only thing with weight;
  * everything else recedes so a tired person sees two fields and one button.

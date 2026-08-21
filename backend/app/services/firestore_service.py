@@ -216,8 +216,36 @@ class FirestoreService:
 
         ref.update({"elder_ids": remaining, "elder_id": remaining[0]})
 
-    def get_device_tokens(self, elder_id: str) -> list[str]:
-        queries = (
+    def deactivate_devices_for_elder(self, elder_id: str) -> int:
+        """Takes one elder off every phone they are paired to.
+
+        The counterpart to revoking their Firebase sessions: that stops the
+        devices reading, this stops CareBridge writing to them. Anyone else on
+        a shared handset stays paired.
+        """
+        seen: set[str] = set()
+
+        for query in self._device_queries(elder_id):
+            for snapshot in query.stream():
+                if snapshot.id in seen:
+                    continue
+                seen.add(snapshot.id)
+
+                data = snapshot.to_dict()
+                remaining = [
+                    e for e in (data.get("elder_ids") or []) if e != elder_id
+                ]
+                ref = self.db.collection("devices").document(snapshot.id)
+
+                if remaining:
+                    ref.update({"elder_ids": remaining, "elder_id": remaining[0]})
+                else:
+                    ref.update({"active": False, "elder_ids": [], "elder_id": None})
+
+        return len(seen)
+
+    def _device_queries(self, elder_id: str):
+        return (
             self.db.collection("devices").where(
                 filter=firestore.FieldFilter("elder_ids", "array_contains", elder_id)
             ),
@@ -227,8 +255,9 @@ class FirestoreService:
             ),
         )
 
+    def get_device_tokens(self, elder_id: str) -> list[str]:
         tokens = []
-        for query in queries:
+        for query in self._device_queries(elder_id):
             for snapshot in query.stream():
                 data = snapshot.to_dict()
                 if data.get("active") and data["fcm_token"] not in tokens:

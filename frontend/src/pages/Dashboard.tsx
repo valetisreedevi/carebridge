@@ -237,6 +237,8 @@ export default function Dashboard() {
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryDay[]>([]);
   const [confirmingRemind, setConfirmingRemind] = useState<string | null>(null);
+  const [confirmingSignOut, setConfirmingSignOut] = useState<string | null>(null);
+  const [signOutResult, setSignOutResult] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [newElderName, setNewElderName] = useState("");
   const [pairingCode, setPairingCode] = useState<{
@@ -334,6 +336,29 @@ export default function Dashboard() {
       await loadDay();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not send the reminder");
+    }
+  };
+
+  const signOutDevices = async (elderId: string) => {
+    // Same two-step as Remind now. This one cannot be undone from here: every
+    // phone has to be paired again with a fresh code.
+    if (confirmingSignOut !== elderId) {
+      setConfirmingSignOut(elderId);
+      return;
+    }
+
+    setConfirmingSignOut(null);
+    try {
+      const result = await api.signOutDevices(elderId);
+      setSignOutResult(
+        result.devices_signed_out === 0
+          ? `${result.elder_name} had no phones paired.`
+          : `Signed out ${result.devices_signed_out} ${
+              result.devices_signed_out === 1 ? "phone" : "phones"
+            }. Pair again with a new code.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign the phones out");
     }
   };
 
@@ -846,6 +871,28 @@ export default function Dashboard() {
                     </p>
                   </>
                 )}
+
+                <div className="pair__lost">
+                  <p className="muted">
+                    Lost the phone, or someone has it who should not? Signing
+                    out stops it opening {elder.name}'s medicines straight away.
+                  </p>
+                  <button
+                    type="button"
+                    className={
+                      confirmingSignOut === elder.id
+                        ? "btn-danger"
+                        : "btn-quiet btn-quiet--danger"
+                    }
+                    onClick={() => signOutDevices(elder.id)}
+                    onBlur={() => setConfirmingSignOut(null)}
+                  >
+                    {confirmingSignOut === elder.id
+                      ? "Sign every phone out?"
+                      : "Sign out all phones"}
+                  </button>
+                  {signOutResult && <p className="muted">{signOutResult}</p>}
+                </div>
               </>
             ) : (
               <>

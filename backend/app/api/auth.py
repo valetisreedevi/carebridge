@@ -149,7 +149,20 @@ def current_elder_id(
         )
 
     try:
-        claims = firebase_auth.verify_id_token(authorization.split(" ", 1)[1])
+        # check_revoked is what makes signing a device out mean anything. An ID
+        # token stays valid for up to an hour and refreshes indefinitely, so
+        # without this a phone that was lost, stolen, or handed back by a carer
+        # keeps reading medication records and answering doses. It costs a
+        # Firebase lookup per request; at a household's polling rate that is a
+        # trade worth making on a medical record.
+        claims = firebase_auth.verify_id_token(
+            authorization.split(" ", 1)[1], check_revoked=True
+        )
+    except firebase_auth.RevokedIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This device was signed out. Ask for a new pairing code.",
+        )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -166,6 +179,11 @@ def current_elder_id(
     return elder_id
 
 
+def elder_principal(elder_id: str) -> str:
+    """The Firebase user an elder's devices all sign in as."""
+    return f"elder:{elder_id}"
+
+
 def mint_elder_pairing_token(elder_id: str) -> str:
     if not FIREBASE_AVAILABLE:
         raise HTTPException(
@@ -174,6 +192,29 @@ def mint_elder_pairing_token(elder_id: str) -> str:
         )
 
     return firebase_auth.create_custom_token(
-        f"elder:{elder_id}",
+        elder_principal(elder_id),
         {"elder_id": elder_id},
     ).decode()
+
+
+def revoke_elder_sessions(elder_id: str) -> None:
+    """Signs out every device paired to one elder, immediately.
+
+    Devices share a single Firebase principal per elder, so this is all of that
+    elder's phones and tablets rather than a chosen one — which is the right
+    shape for the case it exists for. A phone that is lost is a phone whose FCM
+    token you cannot look up, and not knowing which device to distrust is
+    exactly when you distrust all of them.
+
+    Nobody else is affected: another elder on the same shared handset is a
+    different principal and keeps their session.
+    """
+    if not FIREBASE_AVAILABLE:
+        logger.warning("Firebase unavailable; no elder session to revoke")
+        return
+
+    try:
+        firebase_auth.revoke_refresh_tokens(elder_principal(elder_id))
+    except firebase_auth.UserNotFoundError:
+        # No device ever paired. Nothing to sign out, and nothing wrong.
+        logger.info("No paired principal for elder %s", elder_id)

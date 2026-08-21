@@ -24,7 +24,18 @@ def signed_in(monkeypatch):
     monkeypatch.setattr(
         auth_module,
         "firebase_auth",
-        type("Stub", (), {"verify_id_token": staticmethod(lambda _: claims)}),
+        type(
+            "Stub",
+            (),
+            {
+                # Elder verification passes check_revoked, so the stub has to
+                # take it. Signed-out devices have their own test module.
+                "verify_id_token": staticmethod(
+                    lambda _token, check_revoked=False: claims
+                ),
+                "RevokedIdTokenError": type("RevokedIdTokenError", (Exception,), {}),
+            },
+        ),
     )
 
     def configure(token_claims: dict, **settings_overrides):

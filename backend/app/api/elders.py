@@ -8,6 +8,7 @@ from app.api.auth import (
     current_caregiver_id,
     mint_elder_pairing_token,
     require_elder_access,
+    revoke_elder_sessions,
 )
 from app.api import deps
 from app.api.schemas import (
@@ -218,10 +219,43 @@ def unregister_device(
     fcm_token: str,
     caregiver_id: str = Depends(current_caregiver_id),
 ):
-    """Takes one person off a phone without unpairing anyone else on it."""
+    """Takes one person off a phone without unpairing anyone else on it.
+
+    Removing a phone from the list has to remove its access, not just its
+    notifications — a device that still reads the medication record is not
+    unpaired in any sense a caregiver would recognise. Sessions are held per
+    elder, so this signs that elder's other devices out too and they need a
+    fresh pairing code. Anyone else on a shared handset is untouched.
+    """
     firestore = deps.firestore_service()
     require_elder_access(elder_id, caregiver_id, firestore)
+
     firestore.unregister_device(elder_id=elder_id, fcm_token=fcm_token)
+    revoke_elder_sessions(elder_id)
+
+
+@router.post("/elders/{elder_id}/devices/sign-out")
+def sign_out_devices(
+    elder_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Signs every one of an elder's devices out at once.
+
+    For the phone that is lost, stolen, or went home with a carer who no longer
+    works for the family. Unregistering by FCM token cannot help there: the
+    token lives on the handset you no longer have.
+    """
+    firestore = deps.firestore_service()
+    elder = require_elder_access(elder_id, caregiver_id, firestore)
+
+    unpaired = firestore.deactivate_devices_for_elder(elder_id)
+    revoke_elder_sessions(elder_id)
+
+    return {
+        "elder_id": elder_id,
+        "elder_name": elder["name"],
+        "devices_signed_out": unpaired,
+    }
 
 
 @router.get("/elders/{elder_id}/today")
