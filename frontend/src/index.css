@@ -496,6 +496,50 @@ textarea:focus {
   color: var(--ink-soft);
 }
 
+/* The caregiver reads this aloud, so it is set large and spaced rather than
+   sized to be copied. */
+.pair__spoken {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm);
+  padding: 1rem 0.75rem;
+  margin: 1rem 0 0.5rem;
+  text-align: center;
+  user-select: all;
+}
+
+/* Typed by the person the reminders are for, from a code read down a phone:
+   big, widely spaced, and one glance from being checked against what they
+   were told. */
+.pair__entry {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 1.6rem;
+  letter-spacing: 0.16em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 0.9rem 0.5rem;
+  margin: 0.85rem 0 1rem;
+  border: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.pair__entry:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.pair__entry::placeholder {
+  color: var(--muted);
+  letter-spacing: 0.16em;
+}
+
 .pair__steps {
   margin: 0 0 1rem;
   padding-left: 1.1rem;

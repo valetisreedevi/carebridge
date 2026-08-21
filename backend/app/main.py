@@ -4,7 +4,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import agent, caregivers, elders, internal, medications, reminders
+from app.api import (
+    agent,
+    caregivers,
+    elders,
+    internal,
+    medications,
+    pairing,
+    reminders,
+)
 from app.config import get_settings
 from app.models.medication_event import InvalidTransition
 
@@ -29,6 +37,7 @@ app.add_middleware(
 app.include_router(elders.router)
 app.include_router(caregivers.router)
 app.include_router(medications.router)
+app.include_router(pairing.router)
 app.include_router(reminders.router)
 app.include_router(agent.router)
 app.include_router(internal.router)

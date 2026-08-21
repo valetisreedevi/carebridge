@@ -158,6 +158,60 @@ class FirestoreService:
             "accepted_by": caregiver_id,
         })
 
+    # ---------------- elder pairing codes ----------------
+
+    def create_pairing_code(
+        self,
+        code_hash: str,
+        elder_id: str,
+        created_by: str,
+        expires_at: datetime,
+    ) -> None:
+        """Stores a phone-pairing code under its hash, never as the code.
+
+        Same treatment as a caregiver invite, for the same reason: whoever
+        redeems it can read a family member's medication record.
+        """
+        self.db.collection("elder_pairing_codes").document(code_hash).set({
+            "elder_id": elder_id,
+            "created_by": created_by,
+            "expires_at": expires_at,
+            "redeemed_at": None,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+    def claim_pairing_code(self, code_hash: str) -> dict | None:
+        """Takes a code if it is still good, atomically, and returns it.
+
+        One transaction rather than check-then-write: two phones typing the
+        same code at once must not both end up paired, and a code that has
+        been spent is spent. Returns None for unknown, already redeemed, and
+        expired alike — the caller cannot tell them apart, and neither can
+        anyone probing the endpoint.
+        """
+        ref = self.db.collection("elder_pairing_codes").document(code_hash)
+
+        @firestore.transactional
+        def claim(transaction):
+            snapshot = ref.get(transaction=transaction)
+            if not snapshot.exists:
+                return None
+
+            data = snapshot.to_dict()
+            if data.get("redeemed_at"):
+                return None
+
+            expires_at = data["expires_at"]
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < datetime.now(timezone.utc):
+                return None
+
+            transaction.update(ref, {"redeemed_at": datetime.now(timezone.utc)})
+            return {"id": code_hash, **data}
+
+        return claim(self.db.transaction())
+
     def caregiver_owns_elder(self, caregiver_id: str, elder_id: str) -> bool:
         elder = self.get_elder(elder_id)
         if not elder:

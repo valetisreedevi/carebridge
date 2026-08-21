@@ -77,14 +77,64 @@ function scratchAuth(): Auth {
   return elderAuthFor("__pairing__");
 }
 
-export async function pairElderDevice(pairingToken: string): Promise<string> {
-  const code = pairingToken.trim();
+type RedeemedCode = {
+  elder_id: string;
+  elder_name: string;
+  custom_token: string;
+};
 
-  // Which person this code belongs to is only knowable after signing in, and
+/**
+ * Swaps the spoken code for the credential the device signs in with.
+ *
+ * A bare fetch rather than the shared client, for two reasons: the elder has
+ * no account to authenticate with, and client.ts already imports this module.
+ */
+async function redeemPairingCode(code: string): Promise<RedeemedCode> {
+  const base = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+  const response = await fetch(`${base}/api/pairing/redeem`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!response.ok) {
+    throw new Error("That code is not a CareBridge pairing code");
+  }
+
+  return response.json();
+}
+
+/**
+ * A Firebase custom token is a JWT: three dot-separated parts, hundreds of
+ * characters. A spoken pairing code is eleven. Nothing has to be guessed.
+ */
+function looksLikeACustomToken(value: string): boolean {
+  return value.split(".").length === 3 && value.length > 100;
+}
+
+export async function pairElderDevice(
+  entered: string,
+): Promise<{ elderId: string; elderName: string | null }> {
+  const value = entered.trim();
+
+  // The short code is what a family reads to each other; the long token is
+  // what the earlier build handed out. Both are accepted, so a phone set up
+  // either way keeps working.
+  if (!looksLikeACustomToken(value)) {
+    const redeemed = await redeemPairingCode(value);
+    await signInWithCustomToken(
+      elderAuthFor(redeemed.elder_id),
+      redeemed.custom_token,
+    );
+    return { elderId: redeemed.elder_id, elderName: redeemed.elder_name };
+  }
+
+  // Which person this token belongs to is only knowable after signing in, and
   // the session has to live under that person's own app. So: read it on a
   // scratch app, then sign in properly. Custom tokens stay valid for an hour,
   // so the second use is fine.
-  const probe = await signInWithCustomToken(scratchAuth(), code);
+  const probe = await signInWithCustomToken(scratchAuth(), value);
   const claims = await probe.user.getIdTokenResult();
   const elderId = claims.claims.elder_id;
 
@@ -92,10 +142,10 @@ export async function pairElderDevice(pairingToken: string): Promise<string> {
     throw new Error("That code is not a CareBridge pairing code");
   }
 
-  await signInWithCustomToken(elderAuthFor(elderId), code);
+  await signInWithCustomToken(elderAuthFor(elderId), value);
   await signOut(scratchAuth());
 
-  return elderId;
+  return { elderId, elderName: null };
 }
 
 export async function elderIdToken(elderId: string): Promise<string | null> {

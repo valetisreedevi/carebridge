@@ -121,3 +121,9 @@ class MarkTakenRequest(BaseModel):
 
 class AcceptInviteRequest(BaseModel):
     code: str = Field(min_length=6, max_length=32)
+
+
+class RedeemPairingCodeRequest(BaseModel):
+    """The code an elder types into their phone."""
+
+    code: str = Field(min_length=6, max_length=32)

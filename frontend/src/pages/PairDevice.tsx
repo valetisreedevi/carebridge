@@ -5,11 +5,15 @@ import { pairElderDevice } from "../api/firebase";
 /**
  * Shown on the elder's phone once, during setup. After this the device holds
  * its own credential and the elder never sees a form again.
+ *
+ * The field is small and the type is large because the person filling it in is
+ * the person the reminders are for, typing a code somebody read to them.
  */
 export default function PairDevice({ onPaired }: { onPaired: () => void }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paired, setPaired] = useState<string | null>(null);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -17,33 +21,62 @@ export default function PairDevice({ onPaired }: { onPaired: () => void }) {
     setError(null);
 
     try {
-      const elderId = await pairElderDevice(code);
+      const { elderId, elderName } = await pairElderDevice(code);
       pairElder(elderId);
+
+      // Their own name, before anything else happens. A code typed one
+      // character out lands on a real person, and this is where that shows up
+      // rather than at the next dose.
+      if (elderName) {
+        setPaired(elderName);
+        return;
+      }
+
       onPaired();
     } catch (e) {
       setError(
         e instanceof Error && e.message.includes("pairing code")
-          ? e.message
+          ? "That code did not work. Ask your family for a new one."
           : "That code did not work. Ask your family for a new one.",
       );
       setBusy(false);
     }
   };
 
+  if (paired) {
+    return (
+      <main className="elder elder--calm">
+        <h1>This phone is set up for {paired}</h1>
+        <p className="elder__muted">
+          Reminders will arrive here from now on. There is nothing else to do.
+        </p>
+        <button
+          type="button"
+          className="elder__button elder__button--taken"
+          onClick={onPaired}
+        >
+          Done
+        </button>
+      </main>
+    );
+  }
+
   return (
     <main className="elder elder--calm">
       <h1>Set up this phone</h1>
       <p className="elder__muted">
-        Paste the code your family gave you.
+        Type the code your family gave you.
       </p>
 
       <form onSubmit={submit}>
-        <textarea
-          className="pair__code"
+        <input
+          className="pair__entry"
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="Paste the code here"
-          rows={4}
+          placeholder="ABCDE-FGHJK"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
           required
           aria-label="Pairing code"
         />
@@ -53,7 +86,7 @@ export default function PairDevice({ onPaired }: { onPaired: () => void }) {
         <button
           type="submit"
           className="elder__button elder__button--taken"
-          disabled={busy || code.trim().length < 20}
+          disabled={busy || code.trim().length < 6}
         >
           {busy ? "Setting up…" : "Set up"}
         </button>

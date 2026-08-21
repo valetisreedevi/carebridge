@@ -8,37 +8,18 @@ The invite is a short code the first caregiver reads out or forwards, in the
 same shape as the elder pairing code the family already understands.
 """
 
-import hashlib
-import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.auth import CAREGIVER_EMAILS, current_caregiver_id, require_elder_access
 from app.api import deps
+from app.api.codes import hash_code as _hash, new_code as _new_code
 from app.api.schemas import AcceptInviteRequest
 
 router = APIRouter(prefix="/api", tags=["caregivers"])
 
-# No 0/O/1/I: this gets read aloud over a phone call between family members.
-ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-CODE_LENGTH = 10
 INVITE_LIFETIME = timedelta(hours=72)
-
-
-def _new_code() -> str:
-    raw = "".join(secrets.choice(ALPHABET) for _ in range(CODE_LENGTH))
-    return f"{raw[:5]}-{raw[5:]}"
-
-
-def _hash(code: str) -> str:
-    """Invites are stored under this, never as the code itself.
-
-    Anyone holding the code can read a family member's medication record, so a
-    leaked database should not hand over working invites.
-    """
-    normalised = code.strip().upper().replace("-", "").replace(" ", "")
-    return hashlib.sha256(normalised.encode()).hexdigest()
 
 
 @router.post("/elders/{elder_id}/invites", status_code=201)

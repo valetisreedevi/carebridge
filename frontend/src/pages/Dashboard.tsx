@@ -441,8 +441,8 @@ export default function Dashboard() {
   const getCode = async (elderId: string) => {
     setPairingBusy(true);
     try {
-      const result = await api.pairingToken(elderId);
-      setPairingCode({ elderId, code: result.pairing_token });
+      const result = await api.pairingCode(elderId);
+      setPairingCode({ elderId, code: result.code });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not make a code");
     } finally {
@@ -839,7 +839,7 @@ export default function Dashboard() {
                 <ol className="pair__steps">
                   <li>Open this website on {elder.name}'s phone.</li>
                   <li>Tap <strong>Elder device</strong> at the top.</li>
-                  <li>Paste the code below and tap Set up.</li>
+                  <li>Read them the code below, and they type it in.</li>
                 </ol>
 
                 <button
@@ -857,17 +857,17 @@ export default function Dashboard() {
 
                 {pairingCode?.elderId === elder.id && (
                   <>
-                    <textarea
-                      className="pair__code"
-                      readOnly
-                      rows={4}
-                      value={pairingCode.code}
-                      onFocus={(e) => e.currentTarget.select()}
+                    {/* Short enough to say out loud, which is how a family
+                        does this — so it is set to be read, not copied. */}
+                    <p
+                      className="pair__spoken"
                       aria-label={`Pairing code for ${elder.name}`}
-                    />
+                    >
+                      {pairingCode.code}
+                    </p>
                     <p className="muted">
-                      One code, one phone. It expires in an hour, so make a new
-                      one if you do not use it now.
+                      Their phone will show {elder.name}'s name once it works.
+                      One code, one phone, and it lasts three days.
                     </p>
                   </>
                 )}

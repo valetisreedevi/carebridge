@@ -313,6 +313,14 @@ export const api = {
 
   alerts: () => request<Alert[]>("/api/caregivers/me/alerts"),
 
+  pairingCode: (elderId: string) =>
+    request<{
+      code: string;
+      elder_id: string;
+      elder_name: string;
+      expires_at: string;
+    }>(`/api/elders/${elderId}/pairing-code`, { method: "POST" }),
+
   pairingToken: (elderId: string) =>
     request<{ elder_id: string; elder_name: string; pairing_token: string }>(
       `/api/elders/${elderId}/pairing-token`,
