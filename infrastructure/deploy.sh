@@ -57,19 +57,54 @@ for pair in "carebridge-api:CareBridge API" "carebridge-scheduler:CareBridge Sch
       --display-name "$display" --project "$PROJECT_ID"
 done
 
+echo "==> Media bucket"
+# Created here so the storage grant below has something to attach to. It used
+# to be assumed to exist, which held on this project and would not on a fresh
+# one.
+gcloud storage buckets describe "gs://${BUCKET}" --project "$PROJECT_ID" >/dev/null 2>&1 ||
+  gcloud storage buckets create "gs://${BUCKET}" \
+    --project "$PROJECT_ID" \
+    --location "$REGION" \
+    --uniform-bucket-level-access
+
 echo "==> Roles for the API service account"
-# Signed URLs need the account to sign as itself; everything else is the
-# minimum the app actually calls.
+# Project-wide, because there is no smaller scope that works: Firestore and
+# Vertex AI are project resources, and the Firebase admin SDK needs its service
+# agent role to verify tokens and mint pairing credentials.
 for role in \
   roles/datastore.user \
-  roles/storage.objectAdmin \
   roles/aiplatform.user \
-  roles/firebase.sdkAdminServiceAgent \
-  roles/iam.serviceAccountTokenCreator
+  roles/firebase.sdkAdminServiceAgent
 do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member "serviceAccount:${SERVICE_ACCOUNT}" \
     --role "$role" --condition=None --quiet >/dev/null
+done
+
+# Medicine photos and caregiver recordings, scoped to the one bucket that holds
+# them. Granted project-wide, objectAdmin reached every bucket in the project,
+# including the one Cloud Build stages source code into.
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --member "serviceAccount:${SERVICE_ACCOUNT}" \
+  --role roles/storage.objectAdmin \
+  --project "$PROJECT_ID" --quiet >/dev/null
+
+# Signed URLs need the account to sign as itself, and that is the whole of it.
+# Granted project-wide, this let the API container mint tokens for every other
+# service account in the project - Cloud Build's and the scheduler's included -
+# which turns one compromised container into the entire project.
+gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT" \
+  --member "serviceAccount:${SERVICE_ACCOUNT}" \
+  --role roles/iam.serviceAccountTokenCreator \
+  --project "$PROJECT_ID" --quiet >/dev/null
+
+# Withdraw the project-wide versions of the two grants narrowed above.
+# Narrowing only takes anything away if the old binding goes with it, and a
+# project that has run an earlier deploy still carries both.
+for role in roles/storage.objectAdmin roles/iam.serviceAccountTokenCreator; do
+  gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+    --member "serviceAccount:${SERVICE_ACCOUNT}" \
+    --role "$role" --condition=None --quiet >/dev/null 2>&1 || true
 done
 
 echo "==> Cloud Build permissions"
