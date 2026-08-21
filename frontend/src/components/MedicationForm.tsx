@@ -15,14 +15,42 @@ const FOOD_OPTIONS = [
 
 type Props = {
   elderId: string;
+  elderName: string;
+  /** IANA zone the times are read in — theirs, not the caregiver's. */
+  elderTimezone: string;
   onSaved: () => void;
   /** Present when editing; absent when adding a new medication. */
   existing?: Medication;
   onCancel?: () => void;
 };
 
+/** What the clock says where they are, right now. */
+function timeThere(timezone: string): string | null {
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: timezone,
+    }).format(new Date());
+  } catch {
+    return null;
+  }
+}
+
+/** "15:05" as something a person reads: "3:05 pm". */
+function spoken(time: string): string {
+  const [hours, minutes] = time.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
+
+  const suffix = hours < 12 ? "am" : "pm";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
 export default function MedicationForm({
   elderId,
+  elderName,
+  elderTimezone,
   onSaved,
   existing,
   onCancel,
@@ -41,6 +69,12 @@ export default function MedicationForm({
   const [clash, setClash] = useState<DuplicateMedicine | null>(null);
 
   const recorder = useRef<MediaRecorder | null>(null);
+
+  // Read at render rather than ticked: it only has to be right while somebody
+  // is filling the form in, and every keystroke re-renders.
+  const here = timeThere(elderTimezone);
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const elsewhere = Boolean(elderTimezone) && elderTimezone !== mine;
 
   const toggleRecording = async () => {
     if (listening) {
@@ -128,6 +162,17 @@ export default function MedicationForm({
 
   return (
     <form className="medform" onSubmit={save}>
+      {/* The whole point of the product is a family who do not live together,
+          so this is the ordinary case rather than the edge one. Said once at
+          the top, because by the time they reach the time field they are
+          already thinking in their own afternoon. */}
+      {elsewhere && (
+        <p className="medform__zone">
+          Times are {elderName}'s local time
+          {here && <> — it is <strong>{here}</strong> there now</>}, not yours.
+        </p>
+      )}
+
       <div className="medform__grid">
         <label>
           Medicine
@@ -157,6 +202,13 @@ export default function MedicationForm({
             onChange={(e) => setTime(e.target.value)}
             required
           />
+          {/* Whose clock this is. A caregiver abroad is the person this
+              product is for, and a bare time field silently means something
+              other than the one on their own wall. */}
+          <small className="medform__hint">
+            {spoken(time)} for {elderName}
+            {here && <> · {here} there now</>}
+          </small>
         </label>
 
         <label>

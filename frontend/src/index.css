@@ -496,6 +496,26 @@ textarea:focus {
   color: var(--ink-soft);
 }
 
+/* Said before the fields, not beside them: by the time someone reaches the
+   time input they are already thinking in their own afternoon. */
+.medform__zone {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+}
+
+.medform__hint {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
 /* The caregiver reads this aloud, so it is set large and spaced rather than
    sized to be copied. */
 .pair__spoken {

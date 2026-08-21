@@ -607,6 +607,8 @@ export default function Dashboard() {
             {adding && (
               <MedicationForm
                 elderId={elder.id}
+                elderName={elder.name}
+                elderTimezone={elder.timezone}
                 onSaved={() => {
                   setAdding(false);
                   loadDay();
@@ -761,6 +763,8 @@ export default function Dashboard() {
                       <div className="schedule__editor">
                         <MedicationForm
                           elderId={elder.id}
+                          elderName={elder.name}
+                          elderTimezone={elder.timezone}
                           existing={medications.find(
                             (m) => m.id === item.medication_id,
                           )}

@@ -25,9 +25,21 @@ MATERIALISE_STALE_AFTER = timedelta(hours=2)
 
 
 def _zone(name: str | None) -> ZoneInfo:
+    """The elder's own day, falling back to UTC — but never quietly.
+
+    A missing or unresolvable zone puts every dose hours from where the family
+    meant it, and the only symptom is reminders at the wrong time of day.
+    Refusing outright would be worse: it would stop that household's reminders
+    altogether. So it carries on, and says so.
+    """
+    if not name:
+        logger.warning("Elder has no timezone; scheduling their day in UTC")
+        return ZoneInfo("UTC")
+
     try:
-        return ZoneInfo(name or "UTC")
+        return ZoneInfo(name)
     except ZoneInfoNotFoundError:
+        logger.warning("Timezone %r is unknown here; scheduling in UTC", name)
         return ZoneInfo("UTC")
 
 
