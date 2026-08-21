@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { clockTime, timeIn } from "../format";
 import {
   api,
   duplicateMedicine,
@@ -23,29 +24,6 @@ type Props = {
   existing?: Medication;
   onCancel?: () => void;
 };
-
-/** What the clock says where they are, right now. */
-function timeThere(timezone: string): string | null {
-  try {
-    return new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: timezone,
-    }).format(new Date());
-  } catch {
-    return null;
-  }
-}
-
-/** "15:05" as something a person reads: "3:05 pm". */
-function spoken(time: string): string {
-  const [hours, minutes] = time.split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
-
-  const suffix = hours < 12 ? "am" : "pm";
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  return `${hour12}:${String(minutes).padStart(2, "0")} ${suffix}`;
-}
 
 export default function MedicationForm({
   elderId,
@@ -72,7 +50,7 @@ export default function MedicationForm({
 
   // Read at render rather than ticked: it only has to be right while somebody
   // is filling the form in, and every keystroke re-renders.
-  const here = timeThere(elderTimezone);
+  const here = timeIn(elderTimezone);
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const elsewhere = Boolean(elderTimezone) && elderTimezone !== mine;
 
@@ -206,7 +184,7 @@ export default function MedicationForm({
               product is for, and a bare time field silently means something
               other than the one on their own wall. */}
           <small className="medform__hint">
-            {spoken(time)} for {elderName}
+            {clockTime(time)} for {elderName}
             {here && <> · {here} there now</>}
           </small>
         </label>

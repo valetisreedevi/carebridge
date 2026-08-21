@@ -11,6 +11,7 @@ import {
 } from "../api/client";
 import { firebaseConfigured } from "../api/firebase";
 import MedicationForm from "../components/MedicationForm";
+import { clockTime, timeIn } from "../format";
 
 const POLL_MS = 10000;
 
@@ -56,18 +57,6 @@ const COMMON_ZONES = [
 function zoneChoices(current: string): string[] {
   const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return [...new Set([current, here, ...COMMON_ZONES].filter(Boolean))];
-}
-
-/** What the clock currently reads there, so the choice can be sanity-checked. */
-function timeIn(zone: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      timeStyle: "short",
-      timeZone: zone,
-    }).format(new Date());
-  } catch {
-    return "";
-  }
 }
 
 const FOOD_LABEL: Record<string, string> = {
@@ -632,7 +621,7 @@ export default function Dashboard() {
                         : (STATUS_TONE[item.status] ?? "idle")
                     }`}
                   >
-                    <span className="schedule__time">{item.local_time}</span>
+                    <span className="schedule__time">{clockTime(item.local_time)}</span>
 
                     <span className="schedule__what">
                       <strong>{item.medication_name}</strong>
