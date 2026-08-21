@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.auth import (
     CAREGIVER_EMAILS,
     current_caregiver_id,
+    current_elder_id,
     mint_elder_pairing_token,
     require_elder_access,
     revoke_elder_sessions,
@@ -15,6 +16,7 @@ from app.api.schemas import (
     CreateElderRequest,
     RegisterCaregiverTokenRequest,
     RegisterDeviceRequest,
+    RegisterMyDeviceRequest,
     UpdateElderRequest,
 )
 
@@ -139,6 +141,45 @@ def register_device(
     )
     return {"id": device_id, "elder_id": request.elder_id}
 
+
+
+@router.post("/devices/mine", status_code=201)
+def register_my_device(
+    request: RegisterMyDeviceRequest,
+    elder_id: str = Depends(current_elder_id),
+):
+    """A phone putting its own notification address on file.
+
+    POST /devices needs caregiver credentials, which an elder's phone does not
+    have and should not be given — so before this, a paired device could not
+    register itself and no push could ever reach it. The elder id comes from
+    the device's own token, never the body, so a phone can only ever sign
+    itself up for the person it was paired to.
+    """
+    device_id = deps.firestore_service().register_device(
+        elder_id=elder_id,
+        fcm_token=request.fcm_token,
+        platform=request.platform,
+        label=request.label,
+    )
+    return {"id": device_id, "elder_id": elder_id}
+
+
+@router.get("/elders/{elder_id}/devices")
+def list_devices(
+    elder_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Which phones are set up for this person.
+
+    A family had no way to tell whether the phone on the side table was
+    working, and neither did CareBridge. Notification tokens are never
+    included: the dashboard has no use for a phone's address.
+    """
+    firestore = deps.firestore_service()
+    require_elder_access(elder_id, caregiver_id, firestore)
+
+    return firestore.list_devices_for_elder(elder_id)
 
 
 @router.get("/elders/{elder_id}/history")

@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timezone
 from functools import lru_cache
 
@@ -16,6 +17,17 @@ def _doc(snapshot) -> dict | None:
     if not snapshot.exists:
         return None
     return {"id": snapshot.id, **snapshot.to_dict()}
+
+
+def _device_doc_id(fcm_token: str) -> str:
+    """One document per phone, keyed by a hash of its token.
+
+    The token itself was used, truncated to 200 characters and with slashes
+    swapped out. Two tokens sharing a prefix would then collide into one
+    document, and because registration writes rather than merges, a phone
+    could silently be reassigned to another household.
+    """
+    return hashlib.sha256(fcm_token.encode()).hexdigest()
 
 
 class FirestoreService:
@@ -225,6 +237,7 @@ class FirestoreService:
         elder_id: str,
         fcm_token: str,
         platform: str = "ANDROID",
+        label: str | None = None,
     ) -> str:
         """Adds a person to a phone. It never replaces the people already on it.
 
@@ -234,7 +247,7 @@ class FirestoreService:
         elder_id here used to mean pairing a second person silently unpaired the
         first, who then stopped receiving reminders with nothing to show for it.
         """
-        ref = self.db.collection("devices").document(fcm_token[:200].replace("/", "_"))
+        ref = self.db.collection("devices").document(_device_doc_id(fcm_token))
         existing = _doc(ref.get()) or {}
 
         elder_ids = list(existing.get("elder_ids") or [])
@@ -244,20 +257,62 @@ class FirestoreService:
         if elder_id not in elder_ids:
             elder_ids.append(elder_id)
 
+        now = datetime.now(timezone.utc)
+
         ref.set({
             "elder_ids": elder_ids,
             # Kept in step for any reader still expecting one id.
             "elder_id": elder_ids[0],
             "fcm_token": fcm_token,
             "platform": platform,
+            "label": label or existing.get("label"),
             "active": True,
-            "updated_at": datetime.now(timezone.utc),
+            # When the family first set this phone up, kept across
+            # re-registrations so the dashboard can say how long it has been
+            # in service rather than how recently the page was opened.
+            "paired_at": existing.get("paired_at") or now,
+            "last_seen_at": now,
+            "updated_at": now,
         })
         return ref.id
 
+    def list_devices_for_elder(self, elder_id: str) -> list[dict]:
+        """The phones a caregiver can see, newest contact first.
+
+        Never returns the FCM token. It is the address of a person's phone and
+        the dashboard has no use for it — what a family needs to know is
+        whether a phone is set up and when it last checked in.
+        """
+        seen, devices = set(), []
+
+        for query in self._device_queries(elder_id):
+            for snapshot in query.stream():
+                if snapshot.id in seen:
+                    continue
+                seen.add(snapshot.id)
+
+                data = snapshot.to_dict()
+                if not data.get("active"):
+                    continue
+
+                devices.append({
+                    "device_id": snapshot.id,
+                    "platform": data.get("platform"),
+                    "label": data.get("label"),
+                    "paired_at": data.get("paired_at"),
+                    "last_seen_at": data.get("last_seen_at"),
+                    "shared_with": max(len(data.get("elder_ids") or []) - 1, 0),
+                })
+
+        return sorted(
+            devices,
+            key=lambda d: d.get("last_seen_at") or d.get("paired_at") or "",
+            reverse=True,
+        )
+
     def unregister_device(self, elder_id: str, fcm_token: str) -> None:
         """Takes one person off a phone, leaving anyone else on it alone."""
-        ref = self.db.collection("devices").document(fcm_token[:200].replace("/", "_"))
+        ref = self.db.collection("devices").document(_device_doc_id(fcm_token))
         existing = _doc(ref.get())
         if not existing:
             return

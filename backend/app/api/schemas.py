@@ -95,6 +95,18 @@ class RegisterDeviceRequest(BaseModel):
     platform: str = Field(default="ANDROID", max_length=16)
 
 
+class RegisterMyDeviceRequest(BaseModel):
+    """A paired phone offering its own notification address.
+
+    No elder_id: it comes from the device's credentials, so a phone cannot
+    sign itself up for somebody else.
+    """
+
+    fcm_token: str = Field(min_length=10, max_length=4096)
+    platform: str = Field(default="WEB", max_length=16)
+    label: str | None = Field(default=None, max_length=60)
+
+
 class RegisterCaregiverTokenRequest(BaseModel):
     fcm_token: str = Field(min_length=10, max_length=4096)
 

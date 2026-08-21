@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pairElder } from "../api/client";
 import { pairElderDevice } from "../api/firebase";
 
@@ -14,6 +14,26 @@ export default function PairDevice({ onPaired }: { onPaired: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paired, setPaired] = useState<string | null>(null);
+
+  // Held in a ref because the parent passes an inline arrow: depending on it
+  // directly would restart the timer on every re-render, and it would never
+  // fire. Written in an effect rather than during render, which is the only
+  // safe place to touch one.
+  const done = useRef(onPaired);
+  useEffect(() => {
+    done.current = onPaired;
+  });
+
+  useEffect(() => {
+    if (!paired) return;
+
+    // Reading "this phone is set up" as the end of the job is the correct
+    // reading. Requiring a tap after it left the device sitting on a
+    // confirmation screen, not polling, with nothing to say anything was
+    // wrong.
+    const timer = setTimeout(() => done.current(), 2500);
+    return () => clearTimeout(timer);
+  }, [paired]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -55,7 +75,7 @@ export default function PairDevice({ onPaired }: { onPaired: () => void }) {
           className="elder__button elder__button--taken"
           onClick={onPaired}
         >
-          Done
+          Continue
         </button>
       </main>
     );
