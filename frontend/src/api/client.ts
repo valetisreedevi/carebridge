@@ -216,6 +216,18 @@ export type HistoryDay = {
   total: number;
 };
 
+/** A phone set up to receive someone's reminders. Never carries the
+ *  notification token — the dashboard has no use for a phone's address. */
+export type Device = {
+  device_id: string;
+  platform: string | null;
+  label: string | null;
+  paired_at: string | null;
+  last_seen_at: string | null;
+  /** How many other people on this device also get reminders here. */
+  shared_with: number;
+};
+
 export type Alert = {
   id: string;
   reason: string;
@@ -353,17 +365,18 @@ export const api = {
       { method: "DELETE" },
     ),
 
+  /** A paired phone filing its own notification address. The elder id comes
+   *  from the device's credentials, never the body. */
+  registerMyDevice: (elderId: string, fcmToken: string, label: string | null) =>
+    request<{ id: string; elder_id: string }>("/api/devices/mine", {
+      method: "POST",
+      body: { fcm_token: fcmToken, platform: "WEB", label },
+      as: "elder",
+      elderId,
+    }),
+
   listDevices: (elderId: string) =>
-    request<
-      {
-        device_id: string;
-        platform: string | null;
-        label: string | null;
-        paired_at: string | null;
-        last_seen_at: string | null;
-        shared_with: number;
-      }[]
-    >(`/api/elders/${elderId}/devices`),
+    request<Device[]>(`/api/elders/${elderId}/devices`),
 
   signOutDevices: (elderId: string) =>
     request<{ elder_name: string; devices_signed_out: number }>(

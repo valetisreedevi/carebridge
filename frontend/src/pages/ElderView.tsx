@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, pairedElderIds, type Reminder } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
+import { pushState, registerForPush, type PushState } from "../api/push";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 import PairDevice from "./PairDevice";
 
@@ -33,6 +34,8 @@ export default function ElderView() {
   // look like "nothing to take", or a due medicine disappears silently.
   const [unreachable, setUnreachable] = useState(false);
   const [everLoaded, setEverLoaded] = useState(false);
+  const [push, setPush] = useState<PushState>(pushState);
+  const [askingForPush, setAskingForPush] = useState(false);
 
   const stopListening = useRef<() => void>(() => {});
   const playedFor = useRef<string | null>(null);
@@ -76,6 +79,15 @@ export default function ElderView() {
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
   }, [ready, refresh]);
+
+  // A registration token is not permanent, so a phone that filed one last
+  // week may be addressing nobody today. Re-filed on every load, but only
+  // once permission is already granted: nobody should meet a browser dialog
+  // they did not ask for while a tablet is due.
+  useEffect(() => {
+    if (!ready || push !== "on") return;
+    registerForPush(elderIds, { prompt: false });
+  }, [ready, push, elderIds]);
 
   // Load the photo and the caregiver's recording for whichever reminder is up.
   useEffect(() => {
@@ -202,6 +214,13 @@ export default function ElderView() {
     [reminder, busy, say, refresh],
   );
 
+  const askForNotifications = useCallback(async () => {
+    setAskingForPush(true);
+    const granted = await registerForPush(elderIds, { prompt: true });
+    setAskingForPush(false);
+    setPush(granted ? "on" : pushState());
+  }, [elderIds]);
+
   if (credential === "resolving") {
     return (
       <main className="elder elder--calm">
@@ -250,7 +269,31 @@ export default function ElderView() {
       <main className="elder elder--calm">
         <div className="elder__tick">✓</div>
         <h1>Nothing to take right now</h1>
-        <p className="elder__muted">CareBridge will let you know when it is time.</p>
+        <p className="elder__muted">
+          {push === "on"
+            ? "CareBridge will let you know when it is time."
+            : "Keep this page open and CareBridge will show you when it is time."}
+        </p>
+
+        {/* Offered here, on the quiet screen, because asking is a setup step
+            and this is where whoever sets the phone up will be standing. */}
+        {push === "off" && (
+          <button
+            type="button"
+            className="elder__button elder__button--later"
+            onClick={askForNotifications}
+            disabled={askingForPush}
+          >
+            {askingForPush ? "One moment…" : "Let this phone ring for medicines"}
+          </button>
+        )}
+
+        {push === "blocked" && (
+          <p className="elder__muted">
+            This phone is set to block notifications. Reminders still appear on
+            this page while it is open.
+          </p>
+        )}
       </main>
     );
   }

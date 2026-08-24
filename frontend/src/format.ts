@@ -32,3 +32,22 @@ export function timeIn(timezone: string): string {
     return "";
   }
 }
+
+/** "2 minutes ago", for a phone's last contact. Vague on purpose past a day:
+ *  what a family wants to know is whether it is still switched on. */
+export function sinceWhen(value: string | null): string {
+  if (!value) return "never";
+
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "never";
+
+  const minutes = Math.round((Date.now() - then) / 60000);
+  if (minutes < 2) return "just now";
+  if (minutes < 60) return `${minutes} minutes ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return hours === 1 ? "an hour ago" : `${hours} hours ago`;
+
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}

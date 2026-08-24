@@ -23,7 +23,14 @@ const config = {
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  // Notifications only. Sign-in works without it, which is why it was
+  // missing for as long as nothing pushed.
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
+
+/** The values the notification service worker needs, which cannot read them
+ *  itself. Only ever the public web config — no key belongs in here. */
+export const firebaseConfig = config;
 
 /**
  * Sign-in is optional at build time.
@@ -172,6 +179,12 @@ export async function unpairElderDevice(elderId: string): Promise<void> {
 
 export function getAuthOrNull(): Auth | null {
   return auth;
+}
+
+/** The app notifications register against. Sign-in state is irrelevant to a
+ *  push token, so this is the default app even on an elder's phone. */
+export function getAppOrNull(): FirebaseApp | null {
+  return app;
 }
 
 export function watchUser(onChange: (user: User | null) => void): () => void {

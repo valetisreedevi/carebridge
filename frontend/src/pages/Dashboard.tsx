@@ -7,11 +7,12 @@ import {
   type CareTeamMember,
   type Elder,
   type HistoryDay,
+  type Device,
   type Medication,
 } from "../api/client";
 import { firebaseConfigured } from "../api/firebase";
 import MedicationForm from "../components/MedicationForm";
-import { clockTime, timeIn } from "../format";
+import { clockTime, sinceWhen, timeIn } from "../format";
 
 const POLL_MS = 10000;
 
@@ -235,7 +236,7 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryDay[]>([]);
-  const [phones, setPhones] = useState<number | null>(null);
+  const [phones, setPhones] = useState<Device[] | null>(null);
   const [confirmingRemind, setConfirmingRemind] = useState<string | null>(null);
   const [confirmingSignOut, setConfirmingSignOut] = useState<string | null>(null);
   const [signOutResult, setSignOutResult] = useState<string | null>(null);
@@ -275,7 +276,7 @@ export default function Dashboard() {
       setAlerts(alertList);
       setMedications(meds.filter((m) => m.active !== false));
       setHistory(past.days);
-      setPhones(devices.length);
+      setPhones(devices);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load");
     }
@@ -472,7 +473,7 @@ export default function Dashboard() {
         {/* Said before any dose is due, not after one has quietly failed.
             With no phone set up nothing can reach her, and every reminder is
             recorded as sent to nobody. */}
-        {phones === 0 && elder && (
+        {phones?.length === 0 && elder && (
           <p className="dash__nophone">
             No phone is set up for {elder.name}, so reminders cannot reach her.
             Get a pairing code below and enter it on her phone.
@@ -860,8 +861,35 @@ export default function Dashboard() {
 
           <section className="card">
             <div className="card__head">
-              <h2>{elder.name}'s phone</h2>
+              <h2>
+                {elder.name}'s {phones && phones.length > 1 ? "phones" : "phone"}
+              </h2>
             </div>
+
+            {/* Whether the phone on the side table is actually working was
+                something neither the family nor CareBridge could tell. */}
+            {phones && phones.length > 0 && (
+              <ul className="phones">
+                {phones.map((device) => (
+                  <li key={device.device_id} className="phones__row">
+                    <span className="phones__what">
+                      {device.label ?? device.platform ?? "Phone"}
+                      {device.shared_with > 0 && (
+                        <span className="muted">
+                          {" "}
+                          — also {device.shared_with === 1
+                            ? "one other person"
+                            : `${device.shared_with} other people`}
+                        </span>
+                      )}
+                    </span>
+                    <span className="muted">
+                      last heard from {sinceWhen(device.last_seen_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {firebaseConfigured ? (
               <>
