@@ -66,19 +66,26 @@ def get_current_reminder() -> dict:
     """Get the medication reminder the elder is being asked about right now.
 
     Call this first in any conversation so that the name, dose and food
-    instruction you mention are the ones the caregiver actually configured.
-    Never describe a medication that this tool did not return.
+    instruction you mention are the ones the caregiver actually configured, and
+    so that you know which language to speak. Never describe a medication that
+    this tool did not return.
     """
-    _, event, error = _resolve()
+    context, event, error = _resolve()
     if error:
         return {"success": False, "message": error}
 
-    medication = FirestoreService().get_medication(event["medication_id"])
+    firestore = FirestoreService()
+    medication = firestore.get_medication(event["medication_id"])
     if not medication:
         return {"success": False, "message": "That medication could not be found."}
 
+    elder = firestore.get_elder(context.elder_id) or {}
+
     return {
         "success": True,
+        # Which language to answer in. A household that never set one gets
+        # English, which is the same fallback the elder screen uses.
+        "speak_language": elder.get("preferred_language") or "en",
         "medication_name": medication.get("name"),
         "dose": medication.get("dose"),
         "food_instruction": _food_text(medication),

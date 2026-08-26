@@ -3,6 +3,7 @@ import { api, pairedElderIds, type Reminder } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
 import { pushState, registerForPush, type PushState } from "../api/push";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
+import { t, tFood, tTemplate, type StringKey } from "../i18n";
 import PairDevice from "./PairDevice";
 
 const POLL_MS = 15000;
@@ -29,7 +30,10 @@ export default function ElderView() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // Held as a key, not a sentence. On a shared phone the queue can advance to
+  // someone who reads a different language, and a notice raised for the last
+  // person must not still be sitting there in the wrong one.
+  const [notice, setNotice] = useState<StringKey | null>(null);
   // Tracked separately from `notice`: a failed poll must never be able to
   // look like "nothing to take", or a due medicine disappears silently.
   const [unreachable, setUnreachable] = useState(false);
@@ -39,7 +43,12 @@ export default function ElderView() {
 
   const stopListening = useRef<() => void>(() => {});
   const playedFor = useRef<string | null>(null);
-  const lang = "en";
+
+  // The language belongs to whoever this reminder is for, not to the phone.
+  // A device shared by a Telugu speaker and an English speaker shows each of
+  // them their own, one reminder at a time. Before anything has loaded there
+  // is nobody to read yet, so English stands in.
+  const lang = reminder?.elder_language ?? "en";
 
   // Firebase restores a session asynchronously, so polling before this
   // resolves would fetch with no credential and fail on every first load.
@@ -130,7 +139,7 @@ export default function ElderView() {
 
     playedFor.current = reminder.event_id;
     new Audio(audioUrl).play().catch(() => {
-      setNotice("Tap anywhere to hear the message from your family.");
+      setNotice("tapToHear");
     });
   }, [audioUrl, reminder]);
 
@@ -159,7 +168,7 @@ export default function ElderView() {
         say(result.reply);
         await refresh();
       } catch {
-        setNotice("Something went wrong. Please use the buttons below.");
+        setNotice("somethingWrong");
       } finally {
         setBusy(false);
       }
@@ -184,9 +193,9 @@ export default function ElderView() {
         setListening(false);
         send(transcript);
       },
-      (message) => {
+      (failure) => {
         setListening(false);
-        setNotice(message);
+        setNotice(failure);
       },
     );
   }, [listening, lang, send]);
@@ -199,19 +208,19 @@ export default function ElderView() {
       try {
         if (action === "taken") {
           await api.markTaken(reminder.event_id, reminder.elder_id);
-          say("Thank you. I have recorded it.");
+          say(t("recordedThanks", lang));
         } else {
           await api.snooze(reminder.event_id, reminder.elder_id, 10);
-          say("Alright, I will remind you again in ten minutes.");
+          say(t("willRemindInTen", lang));
         }
         await refresh();
       } catch {
-        setNotice("That did not go through. Please try again.");
+        setNotice("didNotGoThrough");
       } finally {
         setBusy(false);
       }
     },
-    [reminder, busy, say, refresh],
+    [reminder, busy, say, refresh, lang],
   );
 
   const askForNotifications = useCallback(async () => {
@@ -221,10 +230,12 @@ export default function ElderView() {
     setPush(granted ? "on" : pushState());
   }, [elderIds]);
 
+  // Everything above the first loaded reminder is in English by necessity:
+  // until the phone knows who it belongs to there is no language to read.
   if (credential === "resolving") {
     return (
       <main className="elder elder--calm">
-        <p className="elder__muted">One moment…</p>
+        <p className="elder__muted">{t("oneMoment", lang)}</p>
       </main>
     );
   }
@@ -235,10 +246,8 @@ export default function ElderView() {
     }
     return (
       <main className="elder elder--calm">
-        <h1>This phone is not set up yet</h1>
-        <p className="elder__muted">
-          Ask your family to set it up from CareBridge.
-        </p>
+        <h1>{t("notSetUp", lang)}</h1>
+        <p className="elder__muted">{t("askFamilyToSetUp", lang)}</p>
       </main>
     );
   }
@@ -247,18 +256,16 @@ export default function ElderView() {
   if (unreachable && !reminder) {
     return (
       <main className="elder elder--calm">
-        <h1>Cannot reach CareBridge</h1>
+        <h1>{t("cannotReach", lang)}</h1>
         <p className="elder__muted">
-          {everLoaded
-            ? "Please check the internet connection."
-            : "Please check the internet connection, then try again."}
+          {t(everLoaded ? "checkInternet" : "checkInternetRetry", lang)}
         </p>
         <button
           type="button"
           className="elder__button elder__button--later"
           onClick={refresh}
         >
-          Try again
+          {t("tryAgain", lang)}
         </button>
       </main>
     );
@@ -268,11 +275,9 @@ export default function ElderView() {
     return (
       <main className="elder elder--calm">
         <div className="elder__tick">✓</div>
-        <h1>Nothing to take right now</h1>
+        <h1>{t("nothingToTake", lang)}</h1>
         <p className="elder__muted">
-          {push === "on"
-            ? "CareBridge will let you know when it is time."
-            : "Keep this page open and CareBridge will show you when it is time."}
+          {t(push === "on" ? "willLetYouKnow" : "keepPageOpen", lang)}
         </p>
 
         {/* Offered here, on the quiet screen, because asking is a setup step
@@ -284,15 +289,12 @@ export default function ElderView() {
             onClick={askForNotifications}
             disabled={askingForPush}
           >
-            {askingForPush ? "One moment…" : "Let this phone ring for medicines"}
+            {t(askingForPush ? "oneMoment" : "letPhoneRing", lang)}
           </button>
         )}
 
         {push === "blocked" && (
-          <p className="elder__muted">
-            This phone is set to block notifications. Reminders still appear on
-            this page while it is open.
-          </p>
+          <p className="elder__muted">{t("notificationsBlocked", lang)}</p>
         )}
       </main>
     );
@@ -300,7 +302,7 @@ export default function ElderView() {
 
   return (
     <main className="elder">
-      <h1 className="elder__title">Medicine time</h1>
+      <h1 className="elder__title">{t("medicineTime", lang)}</h1>
 
       {/* On a phone set up for one person the name is noise. On a shared one
           it is the difference between the right tablet and the wrong one. */}
@@ -310,7 +312,7 @@ export default function ElderView() {
 
       {queue.length > 1 && (
         <p className="elder__count">
-          {queue.length - 1} more after this one
+          {tTemplate("moreAfterThis", lang, { count: queue.length - 1 })}
         </p>
       )}
 
@@ -318,7 +320,11 @@ export default function ElderView() {
 
       <p className="elder__medicine">{reminder.medication_name}</p>
       <p className="elder__dose">{reminder.dose}</p>
-      <p className="elder__food">Take it {reminder.food_instruction_text}</p>
+      <p className="elder__food">
+        {tTemplate("takeIt", lang, {
+          food: tFood(reminder.food_instruction, lang),
+        })}
+      </p>
 
       {turns.length > 0 && (
         <div className="elder__talk">
@@ -330,12 +336,10 @@ export default function ElderView() {
         </div>
       )}
 
-      {notice && <p className="elder__notice">{notice}</p>}
+      {notice && <p className="elder__notice">{t(notice, lang)}</p>}
 
       {unreachable && (
-        <p className="elder__notice">
-          CareBridge is offline. Your answer may not be saved yet.
-        </p>
+        <p className="elder__notice">{t("offlineAnswer", lang)}</p>
       )}
 
       {speechSupported && (
@@ -345,7 +349,10 @@ export default function ElderView() {
           onClick={toggleMic}
           disabled={busy}
         >
-          {listening ? "Listening…" : busy ? "One moment…" : "Speak to CareBridge"}
+          {t(
+            listening ? "listening" : busy ? "oneMoment" : "speakToCareBridge",
+            lang,
+          )}
         </button>
       )}
 
@@ -355,7 +362,7 @@ export default function ElderView() {
         onClick={() => act("taken")}
         disabled={busy}
       >
-        I took it
+        {t("iTookIt", lang)}
       </button>
 
       <button
@@ -364,7 +371,7 @@ export default function ElderView() {
         onClick={() => act("snooze")}
         disabled={busy}
       >
-        Remind me later
+        {t("remindMeLater", lang)}
       </button>
     </main>
   );

@@ -28,14 +28,19 @@ function recognitionClass() {
 
 export const speechSupported = Boolean(recognitionClass());
 
+/** Why listening stopped, as an i18n key rather than a sentence: the words the
+ *  elder reads have to be in their own language, and this file does not know
+ *  what that is. */
+export type ListenFailure = "cannotListen" | "micBlocked" | "didNotCatch";
+
 export function listen(
   lang: string,
   onResult: (transcript: string) => void,
-  onError: (message: string) => void,
+  onError: (failure: ListenFailure) => void,
 ): () => void {
   const Recognition = recognitionClass();
   if (!Recognition) {
-    onError("This browser cannot listen. Please use the buttons.");
+    onError("cannotListen");
     return () => {};
   }
 
@@ -50,11 +55,7 @@ export function listen(
   };
 
   recognition.onerror = (event) => {
-    onError(
-      event.error === "not-allowed"
-        ? "Microphone access is blocked."
-        : "I did not catch that.",
-    );
+    onError(event.error === "not-allowed" ? "micBlocked" : "didNotCatch");
   };
 
   recognition.start();

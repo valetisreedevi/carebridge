@@ -239,9 +239,15 @@ export type Reminder = {
   event_id: string;
   elder_id: string;
   elder_name: string | null;
+  /** Which language this reminder is read and spoken in. Per reminder, not per
+   *  device: a shared phone can queue two people who do not share one. */
+  elder_language: string;
   medication_id: string;
   medication_name: string;
   dose: string;
+  /** The raw enum, translated on the client. `food_instruction_text` is the
+   *  English rendering and is only used when nothing translates the enum. */
+  food_instruction: string;
   food_instruction_text: string;
   notes: string | null;
   status: string;

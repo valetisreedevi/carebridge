@@ -11,6 +11,7 @@ import {
   type Medication,
 } from "../api/client";
 import { firebaseConfigured } from "../api/firebase";
+import { LANGUAGE_CHOICES } from "../i18n";
 import MedicationForm from "../components/MedicationForm";
 import { clockTime, sinceWhen, timeIn } from "../format";
 
@@ -242,6 +243,7 @@ export default function Dashboard() {
   const [signOutResult, setSignOutResult] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [newElderName, setNewElderName] = useState("");
+  const [newElderLanguage, setNewElderLanguage] = useState("en");
   const [pairingCode, setPairingCode] = useState<{
     elderId: string;
     code: string;
@@ -313,7 +315,10 @@ export default function Dashboard() {
       const elder = await api.createElder({
         name: newElderName.trim(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        preferred_language: "en",
+        // Asked for at the same moment as the name, because the person setting
+        // this up knows it then, and the elder screen is unreadable to whoever
+        // it is for until somebody says.
+        preferred_language: newElderLanguage,
       });
       setNewElderName("");
       await loadElders();
@@ -445,6 +450,16 @@ export default function Dashboard() {
     }
   };
 
+  const changeLanguage = async (language: string) => {
+    if (!selected) return;
+    try {
+      await api.updateElder(selected, { preferred_language: language });
+      await loadElders();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the language");
+    }
+  };
+
   const getCode = async (elderId: string) => {
     setPairingBusy(true);
     try {
@@ -507,6 +522,17 @@ export default function Dashboard() {
             placeholder="Add someone"
             aria-label="Name of the person you care for"
           />
+          <select
+            value={newElderLanguage}
+            onChange={(event) => setNewElderLanguage(event.target.value)}
+            aria-label="Language they read and speak"
+          >
+            {LANGUAGE_CHOICES.map((choice) => (
+              <option key={choice.code} value={choice.code}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
           <button type="submit">Add</button>
         </form>
 
@@ -576,6 +602,25 @@ export default function Dashboard() {
                 <p className="settings__note">
                   Reminder times are read in {elder.name}'s timezone, not yours.
                   It is {timeIn(elder.timezone)} there now.
+                </p>
+
+                <label>
+                  Language for {elder.name}
+                  <select
+                    value={elder.preferred_language}
+                    onChange={(event) => changeLanguage(event.target.value)}
+                  >
+                    {LANGUAGE_CHOICES.map((choice) => (
+                      <option key={choice.code} value={choice.code}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="settings__note">
+                  {elder.name}'s screen is written and spoken in this language,
+                  and CareBridge listens for it too. Medicine names stay exactly
+                  as you typed them.
                 </p>
 
                 <div className="team">

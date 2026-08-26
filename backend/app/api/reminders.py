@@ -43,6 +43,10 @@ def _present(event: dict, medication: dict, elder: dict | None = None) -> dict:
         # side table between two people is ambiguous, and ambiguity here means
         # the wrong person takes a tablet.
         "elder_name": (elder or {}).get("name"),
+        # The screen is read and spoken in the elder's own language, and a
+        # shared phone can hold a queue belonging to two people who do not
+        # share one. So it travels per reminder rather than per device.
+        "elder_language": (elder or {}).get("preferred_language") or "en",
         "medication_id": medication["id"],
         "medication_name": medication.get("name"),
         "dose": medication.get("dose"),
