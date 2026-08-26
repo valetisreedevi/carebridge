@@ -108,11 +108,30 @@ def update_medication(
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    firestore = deps.firestore_service()
+    existing = firestore.get_medication(medication_id) or {}
+
     if "schedule_times" in updates:
         updates["schedule_time"] = updates["schedule_times"][0]
 
-    firestore = deps.firestore_service()
+    # Moving a dose from 21:56 to 22:30 used to leave the 21:56 event live,
+    # with its own next_attempt_at, while the worker raised a second event for
+    # the new time. She was then reminded twice about one tablet, and the old
+    # one escalated to the family about a dose that no longer exists.
+    #
+    # Deleting a medication already closes its outstanding events for exactly
+    # this reason; rescheduling is the same act by another name. Only when the
+    # times actually change — editing a dose or a note must not cancel a
+    # reminder somebody is part-way through answering.
+    rescheduled = "schedule_times" in updates and sorted(
+        updates["schedule_times"]
+    ) != sorted(existing.get("schedule_times") or [])
+
     firestore.update_medication(medication_id, updates)
+
+    if rescheduled:
+        deps.event_service().cancel_outstanding_for_medication(medication_id)
+
     return firestore.get_medication(medication_id)
 
 
