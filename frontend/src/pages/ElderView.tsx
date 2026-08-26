@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, pairedElderIds, type Reminder } from "../api/client";
+import {
+  api,
+  ApiError,
+  pairedElderIds,
+  unpairElder,
+  type Reminder,
+} from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
 import { pushState, registerForPush, type PushState } from "../api/push";
+import { playVoice, unlockAudio, whenVoiceEnds } from "../api/audio";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 import { t, tFood, tTemplate, type StringKey } from "../i18n";
 import PairDevice from "./PairDevice";
@@ -40,6 +47,13 @@ export default function ElderView() {
   const [everLoaded, setEverLoaded] = useState(false);
   const [push, setPush] = useState<PushState>(pushState);
   const [askingForPush, setAskingForPush] = useState(false);
+  // A recording of her own son saying "take your tablet" is the best thing on
+  // this screen. It used to play once, silently fail on most phones, and then
+  // ask her to tap the screen — an apology for a browser rule, dressed up as
+  // an instruction. It is a feature, so it gets a button, and she can hear it
+  // as many times as she likes.
+  const [voicePlaying, setVoicePlaying] = useState(false);
+  const [heardVoice, setHeardVoice] = useState(false);
 
   const stopListening = useRef<() => void>(() => {});
   const playedFor = useRef<string | null>(null);
@@ -69,11 +83,45 @@ export default function ElderView() {
     try {
       // One queue across everyone this phone is set up for, in time order, so
       // a couple sharing a device are not asked to take turns with the screen.
-      const perPerson = await Promise.all(
+      //
+      // Settled, not all: a phone keeps ids for everyone it was ever set up
+      // for, and one of them losing its session must not blank the screen for
+      // the person standing in front of it. With Promise.all a single stale id
+      // — an unfinished setup, a household member since removed — took the
+      // whole household down and reported it as no internet.
+      const perPerson = await Promise.allSettled(
         elderIds.map((id) => api.activeReminder(id)),
       );
 
-      setQueue(perPerson.flatMap((response) => response.reminders ?? []));
+      // Nobody answered at all. That is the only case that is really a
+      // connection problem; one person failing is that person's problem.
+      if (!perPerson.some((result) => result.status === "fulfilled")) {
+        setUnreachable(true);
+        return;
+      }
+
+      // Whoever has no credential left is dropped rather than retried every
+      // fifteen seconds forever. Only for the definite refusal — a network
+      // blip must never unpair anybody.
+      const lost = elderIds.filter((_, index) => {
+        const result = perPerson[index];
+        return (
+          result.status === "rejected" &&
+          result.reason instanceof ApiError &&
+          result.reason.status === 401
+        );
+      });
+
+      if (lost.length) {
+        lost.forEach(unpairElder);
+        setElderIds(pairedElderIds());
+      }
+
+      setQueue(
+        perPerson.flatMap((result) =>
+          result.status === "fulfilled" ? (result.value.reminders ?? []) : [],
+        ),
+      );
       setUnreachable(false);
       setEverLoaded(true);
     } catch {
@@ -106,6 +154,9 @@ export default function ElderView() {
       return;
     }
 
+    setHeardVoice(false);
+    setVoicePlaying(false);
+
     let cancelled = false;
     const created: string[] = [];
 
@@ -132,16 +183,43 @@ export default function ElderView() {
     };
   }, [reminder]);
 
+  /**
+   * The recording of somebody's own family saying "take your tablet".
+   *
+   * A phone will not make a sound it was not asked for, so the first attempt
+   * is refused on most handsets and the screen falls back to asking for a
+   * tap. That ask used to go nowhere: nothing listened, so an elder who did
+   * exactly as they were told still heard silence. Now any tap on the screen
+   * retries it, which is also the gesture that unblocks audio for the rest of
+   * the visit.
+   */
+  const playFamilyVoice = useCallback(async () => {
+    if (!audioUrl) return;
+
+    setVoicePlaying(true);
+    // The shared element, not a new one: a fresh Audio() is a fresh element
+    // that no gesture ever unlocked, which is why the recording used to play
+    // only for whoever had just pressed something.
+    const played = await playVoice(audioUrl);
+
+    if (played) {
+      setHeardVoice(true);
+      setNotice((current) => (current === "tapToHear" ? null : current));
+    } else {
+      setVoicePlaying(false);
+    }
+  }, [audioUrl]);
+
+  useEffect(() => whenVoiceEnds(() => setVoicePlaying(false)), []);
+
   // The caregiver's voice plays once per reminder, not on every poll.
   useEffect(() => {
     if (!audioUrl || !reminder) return;
     if (playedFor.current === reminder.event_id) return;
 
     playedFor.current = reminder.event_id;
-    new Audio(audioUrl).play().catch(() => {
-      setNotice("tapToHear");
-    });
-  }, [audioUrl, reminder]);
+    void playFamilyVoice();
+  }, [audioUrl, reminder, playFamilyVoice]);
 
   const say = useCallback(
     (text: string) => {
@@ -301,7 +379,16 @@ export default function ElderView() {
   }
 
   return (
-    <main className="elder">
+    // The tap the notice asks for. On the whole screen rather than a button,
+    // because "tap anywhere" has to mean anywhere to somebody holding the
+    // phone at arm's length. Harmless when there is nothing waiting to play.
+    <main
+      className="elder"
+      onClick={() => {
+        unlockAudio();
+        void playFamilyVoice();
+      }}
+    >
       <h1 className="elder__title">{t("medicineTime", lang)}</h1>
 
       {/* On a phone set up for one person the name is noise. On a shared one
@@ -317,6 +404,33 @@ export default function ElderView() {
       )}
 
       {photoUrl && <img className="elder__photo" src={photoUrl} alt="" />}
+
+      {/* Offered whenever a recording exists, whether or not it managed to
+          play on its own. A phone that refused to autoplay and a phone that
+          played it while she was in the next room look the same to her. */}
+      {audioUrl && (
+        <button
+          type="button"
+          className={`elder__voice ${voicePlaying ? "elder__voice--on" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            void playFamilyVoice();
+          }}
+          disabled={voicePlaying}
+        >
+          <span className="elder__voiceMark" aria-hidden="true">
+            ▶
+          </span>
+          {t(
+            voicePlaying
+              ? "hearFamilyPlaying"
+              : heardVoice
+                ? "hearFamilyAgain"
+                : "hearFamily",
+            lang,
+          )}
+        </button>
+      )}
 
       <p className="elder__medicine">{reminder.medication_name}</p>
       <p className="elder__dose">{reminder.dose}</p>

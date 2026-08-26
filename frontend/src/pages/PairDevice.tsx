@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { pairElder } from "../api/client";
 import { pairElderDevice } from "../api/firebase";
+import { unlockAudio } from "../api/audio";
 
 /**
  * Shown on the elder's phone once, during setup. After this the device holds
@@ -37,6 +38,14 @@ export default function PairDevice({ onPaired }: { onPaired: () => void }) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // The one tap that matters. Setting a phone up is done by a family
+    // member, in the room, pressing a button — so this is where the browser's
+    // "no sound without a gesture" rule gets satisfied, once, on their
+    // behalf. Every reminder after this plays on its own, and the person the
+    // reminders are for never has to press anything to hear her family.
+    unlockAudio();
+
     setBusy(true);
     setError(null);
 

@@ -45,9 +45,20 @@ export function pairedElderId(): string | null {
   return pairedElderIds()[0] ?? null;
 }
 
+/**
+ * Whoever just paired goes to the head of the list, and that ordering is load
+ * bearing rather than cosmetic. The elder screen decides whether this device
+ * has a credential at all by watching the FIRST id, so a phone that still
+ * carried an older one appended the new person, kept watching the old one's
+ * empty session, and sat on the pairing screen forever — with a correct
+ * sign-in behind it and a Continue button that could not do anything, because
+ * the first id never changed.
+ *
+ * The person who just typed a code is the one whose session was proven a
+ * moment ago, so they are the right one to anchor to.
+ */
 export function pairElder(elderId: string): void {
-  const ids = pairedElderIds();
-  if (!ids.includes(elderId)) ids.push(elderId);
+  const ids = [elderId, ...pairedElderIds().filter((id) => id !== elderId)];
 
   localStorage.setItem(ELDER_LIST_KEY, JSON.stringify(ids));
   localStorage.setItem(ELDER_KEY, ids[0]);

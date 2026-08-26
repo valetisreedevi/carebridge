@@ -114,6 +114,18 @@ const STRINGS = {
     en: "Tap anywhere to hear the message from your family.",
     te: "మీ కుటుంబం పంపిన సందేశం వినడానికి ఎక్కడైనా తాకండి.",
   },
+  hearFamily: {
+    en: "Hear your family",
+    te: "మీ కుటుంబం మాట వినండి",
+  },
+  hearFamilyAgain: {
+    en: "Hear it again",
+    te: "మళ్ళీ వినండి",
+  },
+  hearFamilyPlaying: {
+    en: "Playing…",
+    te: "వినిపిస్తోంది…",
+  },
   micBlocked: {
     en: "Microphone access is blocked.",
     te: "మైక్రోఫోన్ అనుమతి నిలిపివేయబడింది.",
