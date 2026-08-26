@@ -7,7 +7,12 @@ import {
   type Reminder,
 } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
-import { pushState, registerForPush, type PushState } from "../api/push";
+import {
+  pushState,
+  registerForPush,
+  watchForegroundReminders,
+  type PushState,
+} from "../api/push";
 import { playVoice, unlockAudio, whenVoiceEnds } from "../api/audio";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 import { t, tFood, tTemplate, type StringKey } from "../i18n";
@@ -136,6 +141,54 @@ export default function ElderView() {
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
   }, [ready, refresh]);
+
+  // The poll is the safety net, not the mechanism. When a reminder lands on a
+  // phone that is already showing this screen, it should be on it at once —
+  // and her family's voice should start — rather than up to fifteen seconds
+  // later when the timer next comes round.
+  useEffect(() => {
+    if (!ready) return;
+    return watchForegroundReminders(() => void refresh());
+  }, [ready, refresh]);
+
+  /**
+   * Keeps the screen awake while this page is open.
+   *
+   * A phone cannot play a sound from a page the system has put to sleep, and
+   * a browser cannot play one at all once the tab has been discarded. The
+   * device this is installed on lives on a side table doing one job, so
+   * holding the screen on is not the imposition it would be on a phone
+   * somebody carries.
+   *
+   * Reacquired on becoming visible again: the lock is dropped every time the
+   * screen is turned off or the app is switched away from, and never comes
+   * back on its own.
+   */
+  useEffect(() => {
+    if (!ready || !("wakeLock" in navigator)) return;
+
+    let lock: WakeLockSentinel | null = null;
+    let released = false;
+
+    const hold = async () => {
+      if (released || document.visibilityState !== "visible") return;
+      try {
+        lock = await navigator.wakeLock.request("screen");
+      } catch {
+        // Refused — low battery, or a browser that says no. The reminder
+        // still arrives; it just may not speak until she wakes the phone.
+      }
+    };
+
+    void hold();
+    document.addEventListener("visibilitychange", hold);
+
+    return () => {
+      released = true;
+      document.removeEventListener("visibilitychange", hold);
+      void lock?.release();
+    };
+  }, [ready]);
 
   // A registration token is not permanent, so a phone that filed one last
   // week may be addressing nobody today. Re-filed on every load, but only

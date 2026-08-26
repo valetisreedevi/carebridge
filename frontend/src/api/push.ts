@@ -33,6 +33,50 @@ export function pushState(): PushState {
   return Notification.permission === "granted" ? "on" : "off";
 }
 
+/**
+ * A reminder arriving while the elder is looking at the screen.
+ *
+ * Firebase delivers a push two ways: to the service worker when the page is
+ * in the background, and to the page itself when it is open. Only the first
+ * was handled, so a phone sitting on the side table with CareBridge open —
+ * the state the whole screen is designed around — received the push and threw
+ * it away, then caught up on its next poll up to fifteen seconds later.
+ *
+ * Fifteen seconds is a long time to hold a tablet and wonder. Worse, it is
+ * fifteen seconds of silence where her family's voice should be.
+ *
+ * Returns a function that stops listening, or a no-op when the phone cannot.
+ */
+export function watchForegroundReminders(onReminder: () => void): () => void {
+  const app = getAppOrNull();
+  if (!pushConfigured || !app) return () => {};
+
+  let stop = () => {};
+  let cancelled = false;
+
+  void (async () => {
+    try {
+      const { getMessaging, isSupported, onMessage } = await import(
+        "firebase/messaging"
+      );
+      if (!(await isSupported()) || cancelled) return;
+
+      // The payload is deliberately not trusted for content. It says
+      // something arrived; the screen then asks the API what is true.
+      const unsubscribe = onMessage(getMessaging(app), () => onReminder());
+      if (cancelled) unsubscribe();
+      else stop = unsubscribe;
+    } catch {
+      // No foreground channel on this phone. Polling still covers it.
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    stop();
+  };
+}
+
 /** The worker is in public/, so its URL is stable and its scope is the site. */
 function serviceWorkerUrl(): string {
   const params = new URLSearchParams(

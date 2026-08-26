@@ -6,6 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CareBridge</title>
 
+    <!-- start_url is /elder on purpose: the phone anybody installs this on is
+         the one sitting on a side table, not the caregiver's, who uses a
+         browser. Installed it runs standalone, with no address bar for
+         somebody to lose the page behind. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f6b5c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <!-- Newsreader carries the human half, Figtree the operational half, and
          Noto Sans Telugu is not optional: without it a Telugu screen falls
          back to whatever the handset happens to have, which on a cheap phone
