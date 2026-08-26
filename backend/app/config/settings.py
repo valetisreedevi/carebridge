@@ -66,6 +66,18 @@ class Settings(BaseSettings):
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from: str = os.getenv("SMTP_FROM", "")
 
+    @field_validator("smtp_password")
+    @classmethod
+    def _strip_app_password(cls, value: str) -> str:
+        """Google shows an app password as four groups of four, spaced.
+
+        It is meant to be entered without the spaces, and pasting it as shown
+        fails the login with the same "username and password not accepted"
+        as a genuinely wrong password — so the one clue you get points at the
+        wrong problem. Removing the spaces here means both readings work.
+        """
+        return "".join(value.split())
+
     @property
     def email_configured(self) -> bool:
         return bool(self.smtp_host and self.smtp_user and self.smtp_password)

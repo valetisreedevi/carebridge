@@ -24,6 +24,27 @@ except Exception as exc:
     FIREBASE_AVAILABLE = False
 
 
+def caregiver_email(caregiver_id: str) -> str | None:
+    """The address this person signed in with, asked of Firebase directly.
+
+    CAREGIVER_EMAILS only holds what this process has seen since it started,
+    and the caregivers document only holds what some earlier request happened
+    to persist. Neither is a source of truth, and when escalation needs an
+    address it is because nobody answered a medicine reminder — the worst
+    possible moment to discover the field was never filled in.
+
+    Firebase knows, because signing in is the thing it did.
+    """
+    if not FIREBASE_AVAILABLE:
+        return None
+
+    try:
+        return firebase_auth.get_user(caregiver_id).email
+    except Exception as exc:
+        logger.warning("Could not look up an address for %s: %s", caregiver_id, exc)
+        return None
+
+
 def current_caregiver_id(
     authorization: str | None = Header(default=None),
     x_caregiver_id: str | None = Header(default=None),

@@ -74,3 +74,27 @@ def test_a_real_worker_token_starts_normally(monkeypatch):
     monkeypatch.setenv("AUTH_ENABLED", "true")
 
     assert Settings().worker_token == "9f2c1a" * 8
+
+
+def test_a_gmail_app_password_pasted_with_its_spaces_still_works(monkeypatch):
+    """Google shows the password as four groups of four, spaced, and means it
+    to be typed without them. Pasted as shown, the login fails with the same
+    message as a wrong password — so the only clue points somewhere else."""
+    from app.config.settings import Settings
+
+    monkeypatch.setenv("SMTP_PASSWORD", "abcd efgh ijkl mnop")
+    assert Settings().smtp_password == "abcdefghijklmnop"
+
+
+def test_email_is_only_configured_when_all_three_parts_are_there(monkeypatch):
+    """A half-set deployment must report itself unconfigured rather than
+    failing per-message at the point somebody is waiting to be told."""
+    from app.config.settings import Settings
+
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_USER", "someone@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "")
+    assert Settings().email_configured is False
+
+    monkeypatch.setenv("SMTP_PASSWORD", "abcdefghijklmnop")
+    assert Settings().email_configured is True

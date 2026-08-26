@@ -136,6 +136,40 @@ gcloud secrets add-iam-policy-binding carebridge-worker-token \
   --role roles/secretmanager.secretAccessor \
   --project "$PROJECT_ID" --quiet >/dev/null
 
+echo "==> Email escalation"
+# Not generated like the worker token: a mail password belongs to an account
+# somebody owns, so this only wires up what is already there. Missing is a
+# supported state — push still works and the ladder records the attempt — so
+# a deploy must not fail over it, but it must say so, because "the family was
+# emailed" quietly meaning nothing is the worst version of this.
+SMTP_USER="${SMTP_USER:-sreedevivaleti16@gmail.com}"
+SMTP_FROM="${SMTP_FROM:-CareBridge <${SMTP_USER}>}"
+SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+SMTP_PORT="${SMTP_PORT:-587}"
+
+if gcloud secrets describe carebridge-smtp-password --project "$PROJECT_ID" >/dev/null 2>&1
+then
+  gcloud secrets add-iam-policy-binding carebridge-smtp-password \
+    --member "serviceAccount:${SERVICE_ACCOUNT}" \
+    --role roles/secretmanager.secretAccessor \
+    --project "$PROJECT_ID" --quiet >/dev/null
+
+  SMTP_ENV=",SMTP_HOST=${SMTP_HOST},SMTP_PORT=${SMTP_PORT},SMTP_USER=${SMTP_USER},SMTP_FROM=${SMTP_FROM}"
+  SMTP_SECRET=",SMTP_PASSWORD=carebridge-smtp-password:latest"
+  echo "    escalation email will send as ${SMTP_FROM}"
+else
+  SMTP_ENV=""
+  SMTP_SECRET=""
+  echo "    NOT CONFIGURED — the second rung of the escalation ladder will do"
+  echo "    nothing. Create the secret with a Gmail app password from"
+  echo "    https://myaccount.google.com/apppasswords :"
+  echo ""
+  echo "      printf %s 'abcdefghijklmnop' | gcloud secrets create carebridge-smtp-password \\"
+  echo "        --data-file=- --project ${PROJECT_ID}"
+  echo ""
+  echo "    then run this script again."
+fi
+
 # Who may call the service at all, which is separate from who the app thinks
 # you are. With AUTH_ENABLED the API verifies a Firebase token on every request,
 # so it can be reachable; without it the only thing standing between a stranger
@@ -153,8 +187,8 @@ gcloud run deploy "$SERVICE" --quiet \
   --project "$PROJECT_ID" \
   --service-account "$SERVICE_ACCOUNT" \
   "$INVOKER_FLAG" \
-  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=${AUTH_ENABLED},REQUIRE_VERIFIED_EMAIL=${REQUIRE_VERIFIED_EMAIL},CORS_ORIGINS_RAW=${CORS_ORIGINS_RAW}" \
-  --set-secrets "WORKER_TOKEN=carebridge-worker-token:latest" \
+  --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${GENAI_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET_NAME=${BUCKET},GEMINI_MODEL=${GEMINI_MODEL},AUTH_ENABLED=${AUTH_ENABLED},REQUIRE_VERIFIED_EMAIL=${REQUIRE_VERIFIED_EMAIL},CORS_ORIGINS_RAW=${CORS_ORIGINS_RAW}${SMTP_ENV}" \
+  --set-secrets "WORKER_TOKEN=carebridge-worker-token:latest${SMTP_SECRET}" \
   --min-instances 0 \
   --max-instances 5 \
   --timeout 120

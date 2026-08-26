@@ -69,10 +69,34 @@ class NotificationService:
             return 0
 
     def _caregiver_emails(self, caregiver_ids: list[str]) -> list[str]:
+        """Where to write, falling back to whoever they signed in as.
+
+        The stored address is written opportunistically by whichever request
+        happens to run while this process still remembers the token it
+        verified. A household set up before that path existed — or by a
+        process that restarted in between — has a caregivers document with a
+        null email and no sign anything is wrong, right up until the evening
+        nobody answers and there is nowhere to send.
+
+        So a missing address is looked up rather than accepted, and written
+        back so the next one is free.
+        """
+        # Imported here rather than at module scope: the auth module reaches
+        # for Firebase at import time, and a service should not drag that in
+        # for every caller that only ever writes a notification row.
+        from app.api.auth import caregiver_email
+
         addresses = []
         for caregiver_id in caregiver_ids:
             caregiver = self.firestore.get_caregiver(caregiver_id)
             email = (caregiver or {}).get("email")
+
+            if not email:
+                email = caregiver_email(caregiver_id)
+                if email:
+                    logger.info("Filling in a missing address for %s", caregiver_id)
+                    self.firestore.upsert_caregiver(caregiver_id, email=email)
+
             if email and email not in addresses:
                 addresses.append(email)
         return addresses

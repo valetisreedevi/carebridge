@@ -142,3 +142,39 @@ def test_one_bad_address_does_not_stop_the_rest(
 
     assert result["delivered_to"] == 1
     assert [m["To"] for m in outbox] == ["daughter@example.test"]
+
+
+def test_an_address_missing_from_the_document_is_looked_up_and_kept(
+    notifications, firestore_service, monkeypatch
+):
+    """A household set up before the address was ever persisted still gets
+    written to, and does not have to be looked up twice."""
+    from app.services import notification_service as module
+
+    firestore_service.upsert_caregiver("caregiver_1")
+    assert firestore_service.get_caregiver("caregiver_1")["email"] is None
+
+    monkeypatch.setattr(
+        "app.api.auth.caregiver_email", lambda uid: "family@example.com"
+    )
+    monkeypatch.setattr(module.NotificationService, "_email", lambda *a, **k: 1)
+
+    elder_id = firestore_service.create_elder(name="Amma", caregiver_id="caregiver_1")
+    elder = firestore_service.get_elder(elder_id)
+
+    addresses = notifications._caregiver_emails(elder["caregiver_ids"])
+
+    assert addresses == ["family@example.com"]
+    # Written back, so the next escalation does not depend on Firebase again.
+    assert firestore_service.get_caregiver("caregiver_1")["email"] == "family@example.com"
+
+
+def test_no_address_anywhere_is_survivable_not_an_error(
+    notifications, firestore_service, monkeypatch
+):
+    """Nothing to send to must not take the whole escalation down with it —
+    the push rung already went out and the row is still recorded."""
+    monkeypatch.setattr("app.api.auth.caregiver_email", lambda uid: None)
+
+    firestore_service.upsert_caregiver("caregiver_1")
+    assert notifications._caregiver_emails(["caregiver_1"]) == []
