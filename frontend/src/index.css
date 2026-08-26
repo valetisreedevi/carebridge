@@ -16,31 +16,46 @@
  */
 
 :root {
-  --ink: #101a24;
-  --ink-soft: #40515f;
-  --muted: #6b7a88;
-  --line: #e4eaf0;
-  --line-strong: #cfd9e3;
-  --page: #f5f7fa;
+  /* Warm neutrals, not the cool blue-grey a dashboard reaches for by default.
+     This is a product about somebody's mother, and a hospital palette says
+     the opposite of what the thing is for. The hues are all pulled slightly
+     toward the teal so the greys read as chosen rather than inherited. */
+  --ink: #1f1a17;
+  --ink-soft: #4a423c;
+  --muted: #7a706a;
+  --line: #e8e1d9;
+  --line-strong: #d6cdc3;
+  --page: #faf7f2;
   --card: #ffffff;
 
-  --brand: #12695a;
-  --brand-soft: #e6f2ef;
-  --brand-ink: #0d5247;
+  --brand: #0f6b5c;
+  --brand-soft: #e4efec;
+  --brand-ink: #0a4f43;
 
+  /* Status hues keep their one-way meaning. Amber is warmed toward clay:
+     waiting on a person is not an error, and the old orange read like one. */
   --good: #16704a;
-  --good-bg: #e7f4ec;
-  --warn: #8a5209;
-  --warn-bg: #fdf3e2;
+  --good-bg: #e6f2ea;
+  --warn: #97561b;
+  --warn-bg: #f9efe4;
   --bad: #9b2226;
-  --bad-bg: #fcebeb;
+  --bad-bg: #fbeae8;
 
   --radius: 14px;
   --radius-sm: 10px;
-  --shadow: 0 1px 2px rgba(16, 26, 36, 0.04), 0 8px 24px rgba(16, 26, 36, 0.06);
+  --shadow: 0 1px 2px rgba(31, 26, 23, 0.04), 0 10px 28px rgba(31, 26, 23, 0.07);
 
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", sans-serif;
+  /* Figtree runs the interface. Noto Sans Telugu sits in every stack rather
+     than only the elder screen, because a caregiver types a medicine name in
+     whatever script they think in and the dashboard has to render it. */
+  --font-ui: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Noto Sans Telugu", Roboto, sans-serif;
+  /* Reserved for the things a person reads rather than operates: someone's
+     name, a medicine, the one sentence on a quiet screen. */
+  --font-human: "Newsreader", "Noto Sans Telugu", Georgia, "Times New Roman",
+    serif;
+
+  font-family: var(--font-ui);
   color: var(--ink);
   background: var(--page);
   -webkit-font-smoothing: antialiased;
@@ -55,10 +70,21 @@ body {
   background: var(--page);
 }
 
+/* Headings are set in the serif, which is what stops the whole thing reading
+   as another admin panel. Kept to headings only: it is a voice, not a
+   texture, and running text in it would be harder work for tired eyes. */
 h1,
 h2,
 h3 {
-  letter-spacing: -0.011em;
+  font-family: var(--font-human);
+  font-weight: 500;
+  letter-spacing: -0.014em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: 1.85rem;
+  line-height: 1.15;
 }
 
 button {
@@ -176,6 +202,65 @@ textarea:focus {
 .nav__account button {
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
+}
+
+/* ---------------- section tabs ----------------
+ * Sticky, because the answer to "does anyone need me" has to stay reachable
+ * from anywhere in a long day's list without scrolling back up.
+ */
+
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.3rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.tabs__tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-weight: 550;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.tabs__tab:hover:not(:disabled) {
+  background: var(--page);
+  color: var(--ink);
+  border-color: transparent;
+}
+
+.tabs__tab--on,
+.tabs__tab--on:hover:not(:disabled) {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+/* Amber rather than red: an alert is somebody waiting, not a fault. */
+.tabs__count {
+  min-width: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------------- caregiver dashboard ---------------- */
@@ -805,27 +890,100 @@ textarea:focus {
   line-height: 5.5rem;
 }
 
+/* "Medicine time" is spoken to somebody, not labelled at them, so it is set
+   in the serif at a size that carries across a room. */
 .elder__title {
-  font-size: 2.5rem;
+  font-family: var(--font-human);
+  font-size: 2.6rem;
   margin: 0 0 1.75rem;
-  font-weight: 650;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
+/* The photograph of her own strip of tablets is the most useful thing on the
+   screen — she recognises it before she reads anything — so it is given room
+   and a soft frame rather than being treated as an illustration. */
 .elder__photo {
   width: 100%;
-  max-width: 15rem;
+  max-width: 17rem;
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: 20px;
+  border-radius: 24px;
   border: 1px solid var(--line);
   background: var(--card);
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 4px rgba(31, 26, 23, 0.05),
+    0 18px 40px -18px rgba(31, 26, 23, 0.35);
 }
 
+/* Her family's own voice, offered rather than explained.
+ *
+ * Warm and clearly pressable, sitting directly under the photograph because
+ * that is the human half of the screen — the medicine details below it are
+ * the practical half. Wide, but deliberately not as tall as "I took it": it
+ * is a kindness, not the decision she is here to make.
+ */
+.elder__voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1.5rem auto 0;
+  padding: 0.95rem 1.6rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 2px solid var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  box-shadow: 0 1px 2px rgba(31, 26, 23, 0.05),
+    0 10px 22px -14px rgba(15, 107, 92, 0.6);
+}
+
+.elder__voice:hover:not(:disabled) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.elder__voiceMark {
+  font-size: 0.95rem;
+  line-height: 1;
+  transform: translateX(1px);
+}
+
+.elder__voice--on,
+.elder__voice--on:disabled {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  opacity: 1;
+  animation: voicePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes voicePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 107, 92, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 0.65rem rgba(15, 107, 92, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elder__voice--on {
+    animation: none;
+  }
+}
+
+/* Kept in the interface face, not the serif: a medicine name is read letter
+   by letter by someone checking it against a box, and clarity beats warmth
+   at exactly this one spot. */
 .elder__medicine {
   font-size: 2.75rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.1;
+  letter-spacing: -0.02em;
   margin: 1.75rem 0 0.4rem;
 }
 
@@ -882,14 +1040,34 @@ textarea:focus {
 }
 
 .elder__mic,
+/* Generous, soft and unhurried. A tremor makes a small target a lottery, and
+   a hard rectangle reads as a form to fill in rather than a thing to press. */
 .elder__button {
   display: block;
   width: 100%;
   font-size: 1.65rem;
-  padding: 1.35rem;
-  border-radius: 18px;
+  padding: 1.45rem;
+  border-radius: 22px;
   margin-bottom: 0.9rem;
-  font-weight: 550;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 2px rgba(31, 26, 23, 0.06),
+    0 10px 24px -14px rgba(31, 26, 23, 0.45);
+  transition: transform 0.12s ease, background 0.15s, border-color 0.15s;
+}
+
+/* Pressing something should feel like pressing it. */
+.elder__button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elder__button {
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .elder__button:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .elder__mic {

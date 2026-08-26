@@ -244,6 +244,10 @@ export default function Dashboard() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [newElderName, setNewElderName] = useState("");
   const [newElderLanguage, setNewElderLanguage] = useState("en");
+  // One long scroll held everything: the day, the week, the alerts, the
+  // phones and the setup steps. A caregiver checking in between other things
+  // is answering one question, and had to scroll past four others to reach it.
+  const [tab, setTab] = useState<"today" | "alerts" | "phone">("today");
   const [pairingCode, setPairingCode] = useState<{
     elderId: string;
     code: string;
@@ -563,6 +567,32 @@ export default function Dashboard() {
 
       {elder && (
         <>
+          <nav className="tabs" aria-label={`${elder.name}'s sections`}>
+            {(
+              [
+                ["today", "Today"],
+                ["alerts", "Alerts"],
+                ["phone", "Phone"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`tabs__tab ${tab === key ? "tabs__tab--on" : ""}`}
+                aria-current={tab === key ? "page" : undefined}
+                onClick={() => setTab(key)}
+              >
+                {label}
+                {/* The count is the point of the tab. A caregiver should not
+                    have to open it to find out whether it wants them. */}
+                {key === "alerts" && alerts.length > 0 && (
+                  <span className="tabs__count">{alerts.length}</span>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {tab === "today" && (
           <section className="card">
             <div className="card__head">
               <h2>{elder.name}'s medications</h2>
@@ -876,9 +906,11 @@ export default function Dashboard() {
               </ul>
             )}
           </section>
+          )}
 
-          {history.length > 0 && <History days={history} />}
+          {tab === "today" && history.length > 0 && <History days={history} />}
 
+          {tab === "alerts" && (
           <section className="card">
             <div className="card__head">
               <h2>Alerts</h2>
@@ -903,7 +935,9 @@ export default function Dashboard() {
               </ul>
             )}
           </section>
+          )}
 
+          {tab === "phone" && (
           <section className="card">
             <div className="card__head">
               <h2>
@@ -1013,6 +1047,7 @@ export default function Dashboard() {
               </>
             )}
           </section>
+          )}
         </>
       )}
     </div>
