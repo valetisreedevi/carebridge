@@ -184,6 +184,10 @@ else
   HEADER_FLAG=--headers
 fi
 
+# Output discarded, and that is the point: on success gcloud echoes the whole
+# job back, headers included, so every run printed the worker token in clear
+# into the terminal, into CI logs and into anything capturing the session.
+# Errors still surface — only stdout is dropped.
 gcloud scheduler jobs "$ACTION" http carebridge-reminders \
   --location "$REGION" \
   --project "$PROJECT_ID" \
@@ -193,7 +197,9 @@ gcloud scheduler jobs "$ACTION" http carebridge-reminders \
   "$HEADER_FLAG" "X-Worker-Token=${TOKEN}" \
   --oidc-service-account-email "$SCHEDULER_SA" \
   --oidc-token-audience "$URL" \
-  --attempt-deadline 60s
+  --attempt-deadline 60s >/dev/null
+
+echo "==> Scheduler pointed at $URL (token not shown)"
 
 echo "==> Firestore and Storage rules"
 gcloud firestore databases update --type firestore-native \
