@@ -1434,22 +1434,41 @@ textarea:focus {
 }
 
 .progress__bar {
+  display: flex;
   height: 6px;
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
 }
 
-.progress__fill {
+.progress__fill,
+.progress__asked,
+.progress__unreached {
   display: block;
   height: 100%;
-  background: var(--good);
-  border-radius: 999px;
   transition: width 240ms ease;
 }
 
+.progress__fill { background: var(--good); }
+
+/* Asked about, not yet answered. Waiting on a person is not an error. */
+.progress__asked { background: var(--warn-bg); }
+
+/* Never delivered. Hatched rather than coloured, because this segment is not
+   a verdict on her at all — it is the part of the day CareBridge failed to
+   ask about, and it must not read as another shade of bad. */
+.progress__unreached {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--line-strong) 0 3px,
+    var(--page) 3px 6px
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .progress__fill { transition: none; }
+  .progress__fill,
+  .progress__asked,
+  .progress__unreached { transition: none; }
 }
 
 .progress__counts {
@@ -1461,6 +1480,18 @@ textarea:focus {
 .progress__missed {
   color: var(--bad);
   font-weight: 550;
+}
+
+/* The sentence that separates our failure from her behaviour. Deliberately
+   not red: nothing here is her fault, and colouring it like a miss would undo
+   the entire reason for counting this way. */
+.progress__gap,
+.progress__trust {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  padding-left: 0.55rem;
+  border-left: 2px solid var(--line-strong);
 }
 
 /* ---------------- the week behind today ---------------- */
@@ -1489,6 +1520,17 @@ textarea:focus {
 .week__day--part  { background: var(--warn-bg); border-color: transparent; }
 .week__day--bad   { background: var(--bad-bg);  border-color: transparent; }
 .week__day--empty { background: var(--page); }
+
+/* A day nothing reached her on. Hatched, like the bar segment, so the strip
+   cannot be read as a run of missed doses. */
+.week__day--unreached {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--line) 0 4px,
+    var(--card) 4px 8px
+  );
+  border-color: var(--line-strong);
+}
 
 .week__letter {
   font-size: 0.7rem;
@@ -1560,4 +1602,129 @@ textarea:focus {
 
 .rowmenu__danger:hover:not(:disabled) {
   background: var(--bad-bg);
+}
+
+
+/* ---------------- how the week went ----------------
+ * Every figure on this card was counted before the model saw it. The agent
+ * only phrases them, which is why the card renders identically with the agent
+ * switched off — the hint line underneath says which version you are reading.
+ */
+
+.insight__note {
+  margin: 0 0 1rem;
+  font-family: var(--font-human);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.insight__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 0.9rem;
+}
+
+.insight__figures div {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+}
+
+.insight__figures dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.insight__figures dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.insight__changes {
+  list-style: none;
+  margin: 0 0 0.8rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.insight__change {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--page);
+  border: 1px solid var(--line);
+}
+
+.insight__change--worse { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.insight__change--better { background: var(--good-bg); color: var(--good); border-color: transparent; }
+
+/* Ours to fix reads as a job, not a judgement. */
+.insight__change--ours_to_fix { background: var(--brand-soft); color: var(--brand-ink); border-color: transparent; }
+
+/* ---------------- does it actually work ---------------- */
+
+.selftest__run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.selftest {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  padding: 0.8rem;
+  background: var(--page);
+}
+
+.selftest--ok { background: var(--good-bg); border-color: transparent; }
+.selftest--broken { background: var(--warn-bg); border-color: transparent; }
+
+.selftest__verdict {
+  margin: 0 0 0.6rem;
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.selftest__checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.selftest__checks li {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr;
+  gap: 0.1rem 0.5rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+}
+
+.selftest__checks li small {
+  grid-column: 2;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.selftest__checks .is-ok > span:first-child { color: var(--good); }
+.selftest__checks .is-broken > span:first-child { color: var(--bad); }
+
+/* She answered and we could not tell what she meant. Amber, not red: an
+   unclear reply is a person waiting on us, not a dose gone wrong. */
+.schedule__unclear {
+  color: var(--warn);
 }

@@ -186,6 +186,32 @@ class NotificationService:
         )
         return {"notification_id": notification_id, "delivered_to": delivered}
 
+    def send_self_test(self, elder: dict) -> dict:
+        """Rings the elder's phone with nothing attached to it.
+
+        Deliberately not a reminder. It creates no event, touches no dose and
+        never appears in the ledger — a family checking that the phone works
+        must not be able to invent a tablet by doing so, which is exactly what
+        the old "trigger reminder" demo button used to do.
+        """
+        tokens = self.firestore.get_device_tokens(elder["id"])
+        delivered = self._push(
+            tokens,
+            title="CareBridge is working",
+            body=f"This is a test from {elder['name']}'s family. Nothing to do.",
+            data={"type": "SELF_TEST", "elder_id": elder["id"]},
+        )
+
+        self._record({
+            "type": "SELF_TEST",
+            "elder_id": elder["id"],
+            "audience": "ELDER",
+            "delivered_to": delivered,
+            "device_count": len(tokens),
+        })
+
+        return {"devices": len(tokens), "delivered_to": delivered}
+
     def notify_caregiver(
         self,
         elder: dict,

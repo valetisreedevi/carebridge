@@ -8,7 +8,10 @@ import {
   type Elder,
   type HistoryDay,
   type Device,
+  type Insight as InsightData,
+  type Ledger,
   type Medication,
+  type SelfTest,
 } from "../api/client";
 import { firebaseConfigured } from "../api/firebase";
 import { LANGUAGE_CHOICES } from "../i18n";
@@ -121,6 +124,18 @@ function verdict(items: DayItem[]): { text: string; alert: boolean } {
     };
   }
 
+  // She answered. Nobody understood her. That is a person waiting on a reply,
+  // and it outranks anything still merely in flight.
+  const muddled = items.filter((i) => i.unclear_count > 0 && !i.acknowledged_at);
+  if (muddled.length) {
+    return {
+      text: `Could not understand the reply about ${
+        [...new Set(muddled.map((i) => i.medication_name))].join(" and ")
+      }`,
+      alert: true,
+    };
+  }
+
   const waiting = items.filter(
     (i) => i.status === "REMINDER_SENT" || i.status === "SNOOZED",
   );
@@ -142,36 +157,63 @@ function verdict(items: DayItem[]): { text: string; alert: boolean } {
   return { text: "Everything is on track", alert: false };
 }
 
-/** Where the day stands, under the one line that says how it is going. */
-function Progress({ items }: { items: DayItem[] }) {
-  const taken = items.filter((i) => i.status === "TAKEN").length;
-  const missed = items.filter(
-    (i) => (i.status === "ESCALATED" || i.status === "MISSED") && !i.acknowledged_at,
-  ).length;
-  const waiting = items.filter(
-    (i) => i.status === "REMINDER_SENT" || i.status === "SNOOZED",
-  ).length;
+/** The three numbers, and the gap between them.
+ *
+ *  Almost every product in this category shows one: doses taken out of doses
+ *  scheduled. That number silently blames a woman for a phone nobody set up.
+ *  These three separate what CareBridge managed to ask about from what she
+ *  answered, and they add up — so a family can check them rather than trust
+ *  them.
+ */
+function Progress({ ledger }: { ledger: Ledger }) {
+  const { scheduled, asked, taken, unreachable, taken_on_trust } = ledger;
+  if (!scheduled) return null;
+
+  const pct = (n: number) => `${(n / scheduled) * 100}%`;
+
+  // The bar is the reach partition, with green filling the part of `asked`
+  // that came back taken. It cannot be `taken` directly: a dose the family
+  // records that was never delivered counts as taken but was never asked
+  // about, so drawing it inside the asked segment would overflow the track
+  // and, worse, would claim we reached her when we did not.
+  const answered = Math.min(taken, asked);
 
   return (
     <div className="progress">
       <div
         className="progress__bar"
         role="img"
-        aria-label={`${taken} of ${items.length} taken`}
+        aria-label={`${taken} taken, ${asked} asked about, ${scheduled} scheduled`}
       >
+        <span className="progress__fill" style={{ width: pct(answered) }} />
         <span
-          className="progress__fill"
-          style={{ width: `${(taken / items.length) * 100}%` }}
+          className="progress__asked"
+          style={{ width: pct(asked - answered) }}
         />
+        <span className="progress__unreached" style={{ width: pct(unreachable) }} />
       </div>
+
       <p className="progress__counts">
-        <strong>
-          {taken} of {items.length}
-        </strong>{" "}
-        taken
-        {waiting > 0 && <> · {waiting} waiting</>}
-        {missed > 0 && <span className="progress__missed"> · {missed} missed</span>}
+        <strong>{taken}</strong> taken · <strong>{asked}</strong> asked ·{" "}
+        <strong>{scheduled}</strong> scheduled
       </p>
+
+      {/* The whole point of counting this way, said in words. The difference
+          between the second number and the third is the difference between a
+          person ignoring her tablets and a phone that never rang. */}
+      {unreachable > 0 && (
+        <p className="progress__gap">
+          {unreachable === 1 ? "1 dose was" : `${unreachable} doses were`} never
+          asked about — no reminder reached the phone.
+        </p>
+      )}
+
+      {taken_on_trust > 0 && (
+        <p className="progress__trust">
+          {taken_on_trust === 1 ? "1 was" : `${taken_on_trust} were`} recorded on
+          your word rather than hers.
+        </p>
+      )}
     </div>
   );
 }
@@ -191,20 +233,38 @@ function History({ days }: { days: HistoryDay[] }) {
 
       <ul className="week">
         {days.map((day) => {
+          // A day nothing was delivered on is not a bad day for her. It gets
+          // its own mark, so the strip cannot be read as a run of misses.
           const tone =
-            day.total === 0
+            day.scheduled === 0
               ? "empty"
-              : day.missed > 0
-                ? "bad"
-                : day.taken === day.total
-                  ? "good"
-                  : "part";
+              : day.unreachable > 0
+                ? "unreached"
+                : day.no_answer > 0
+                  ? "bad"
+                  : day.asked > 0 && day.taken === day.asked
+                    ? "good"
+                    : "part";
 
           return (
-            <li key={day.date} className={`week__day week__day--${tone}`}>
+            <li
+              key={day.date}
+              className={`week__day week__day--${tone}`}
+              title={
+                day.scheduled === 0
+                  ? "Nothing scheduled"
+                  : `${day.taken} taken of ${day.asked} asked, ${day.scheduled} scheduled`
+              }
+            >
               <span className="week__letter">{weekday(day.date)}</span>
               <span className="week__count">
-                {day.total === 0 ? "–" : `${day.taken}/${day.total}`}
+                {day.scheduled === 0
+                  ? "–"
+                  : day.asked === 0
+                    ? // Nothing was delivered, so there is no ratio to show.
+                      // "0/0" reads as a failure by her; this does not.
+                      "·"
+                    : `${day.taken}/${day.asked}`}
               </span>
             </li>
           );
@@ -212,10 +272,114 @@ function History({ days }: { days: HistoryDay[] }) {
       </ul>
 
       <p className="card__hint week__legend">
-        Doses recorded as taken, out of those scheduled. A day with nothing
-        scheduled shows a dash.
+        Taken, out of the doses CareBridge was able to ask about. A crossed day
+        is one where a reminder never reached the phone — that one is ours, not
+        hers.
       </p>
     </section>
+  );
+}
+
+const CHANGE_LABEL: Record<string, string> = {
+  adherence_of_asked: "doses taken",
+  median_minutes_to_taken: "how long doses take",
+  morning_adherence: "mornings",
+  afternoon_adherence: "afternoons",
+  evening_adherence: "evenings",
+  doses_never_delivered: "reminders that never arrived",
+};
+
+/** The week in a sentence, with the figures underneath it.
+ *
+ *  Every number here was computed before the model saw it; the agent is asked
+ *  only to phrase them. Which is why the card still works with the agent
+ *  switched off — `narrated` says which version you are reading.
+ */
+function Insight({ insight }: { insight: InsightData }) {
+  const week = insight.this_week;
+  const late = week.median_minutes_to_taken;
+
+  return (
+    <section className="card insight">
+      <div className="card__head">
+        <h2>How the week went</h2>
+      </div>
+
+      <p className="insight__note">{insight.note}</p>
+
+      <dl className="insight__figures">
+        <div>
+          <dt>Taken, of those asked</dt>
+          <dd>
+            {week.adherence_of_asked === null
+              ? "—"
+              : `${Math.round(week.adherence_of_asked * 100)}%`}
+          </dd>
+        </div>
+        <div>
+          {/* The number that moves first. Someone beginning to struggle still
+              takes the tablet, just later and later — weeks before a dose is
+              ever actually missed. */}
+          <dt>Usual wait</dt>
+          <dd>{late === null ? "—" : `${Math.round(late)} min`}</dd>
+        </div>
+        <div>
+          <dt>Never delivered</dt>
+          <dd>{week.unreachable}</dd>
+        </div>
+      </dl>
+
+      {insight.what_changed.length > 0 && (
+        <ul className="insight__changes">
+          {insight.what_changed.map((change) => (
+            <li
+              key={change.metric}
+              className={`insight__change insight__change--${change.direction}`}
+            >
+              {CHANGE_LABEL[change.metric] ?? change.metric}
+              {change.direction === "ours_to_fix"
+                ? " — ours to fix"
+                : change.direction === "worse"
+                  ? " — worse than usual"
+                  : " — better than usual"}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="card__hint">
+        {insight.narrated
+          ? "Counted by CareBridge, written up by the analyst agent."
+          : "Counted by CareBridge."}
+      </p>
+    </section>
+  );
+}
+
+/** Whether the whole chain works, asked before the evening it has to.
+ *
+ *  Every silent failure this project has hit is on this list, and each one only
+ *  ever announced itself as "she has not confirmed" — which reads as a person
+ *  rather than as plumbing.
+ */
+function SelfTestResult({ result }: { result: SelfTest }) {
+  return (
+    <div className={`selftest ${result.ok ? "selftest--ok" : "selftest--broken"}`}>
+      <p className="selftest__verdict">
+        {result.ok
+          ? "Everything is set up. A reminder tonight will get through."
+          : "Something in the chain is not set up yet."}
+      </p>
+      <ul className="selftest__checks">
+        {result.checks.map((check) => (
+          <li key={check.check} className={check.ok ? "is-ok" : "is-broken"}>
+            <span aria-hidden="true">{check.ok ? "✓" : "✗"}</span>
+            <span className="selftest__what">{check.check}</span>
+            <small>{check.detail}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -237,6 +401,10 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryDay[]>([]);
+  const [ledger, setLedger] = useState<Ledger | null>(null);
+  const [insight, setInsight] = useState<InsightData | null>(null);
+  const [selfTest, setSelfTest] = useState<SelfTest | null>(null);
+  const [testing, setTesting] = useState(false);
   const [phones, setPhones] = useState<Device[] | null>(null);
   const [confirmingRemind, setConfirmingRemind] = useState<string | null>(null);
   const [confirmingSignOut, setConfirmingSignOut] = useState<string | null>(null);
@@ -279,12 +447,24 @@ export default function Dashboard() {
         api.listDevices(selected),
       ]);
       setItems(day.items);
+      setLedger(day.ledger);
       setAlerts(alertList);
       setMedications(meds.filter((m) => m.active !== false));
       setHistory(past.days);
       setPhones(devices);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load");
+    }
+  }, [selected]);
+
+  // Deliberately outside loadDay. The note is a week old by nature and can
+  // wait on a model for a few seconds; the day cannot wait on anything.
+  const loadInsight = useCallback(async () => {
+    if (!selected) return;
+    try {
+      setInsight(await api.insight(selected));
+    } catch {
+      // A missing weekly note is not worth an error banner over today.
     }
   }, [selected]);
 
@@ -310,6 +490,15 @@ export default function Dashboard() {
   useEffect(() => {
     loadTeam();
   }, [loadTeam]);
+
+  useEffect(() => {
+    setInsight(null);
+    loadInsight();
+  }, [loadInsight]);
+
+  useEffect(() => {
+    setSelfTest(null);
+  }, [selected]);
 
   const addElder = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -375,6 +564,18 @@ export default function Dashboard() {
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not sign the phones out");
+    }
+  };
+
+  const checkItWorks = async (elderId: string) => {
+    setTesting(true);
+    setSelfTest(null);
+    try {
+      setSelfTest(await api.selfTest(elderId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not run the check");
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -487,7 +688,7 @@ export default function Dashboard() {
           {status.text}
         </p>
 
-        {items.length > 0 && <Progress items={items} />}
+        {ledger && <Progress ledger={ledger} />}
 
         {/* Said before any dose is due, not after one has quietly failed.
             With no phone set up nothing can reach her, and every reminder is
@@ -757,6 +958,24 @@ export default function Dashboard() {
                             reminder {item.attempt} of {item.max_attempts}
                           </small>
                         ))}
+
+                      {/* Who vouched for it. A dose recorded from another city
+                          is a different fact from one she answered herself,
+                          and a record a clinician might read should say so. */}
+                      {item.status === "TAKEN" &&
+                        item.confirmed_source === "CAREGIVER" && (
+                          <small>on your word</small>
+                        )}
+
+                      {/* She answered and CareBridge could not tell what she
+                          meant. Nothing was recorded either way, which is the
+                          honest outcome and the one worth showing. */}
+                      {item.unclear_count > 0 && (
+                        <small className="schedule__unclear">
+                          could not understand
+                          {item.last_unclear ? `: “${item.last_unclear}”` : ""}
+                        </small>
+                      )}
                     </span>
 
                     {/* One action visible, ranked by what this row needs, and
@@ -910,6 +1129,8 @@ export default function Dashboard() {
 
           {tab === "today" && history.length > 0 && <History days={history} />}
 
+          {tab === "today" && insight && <Insight insight={insight} />}
+
           {tab === "alerts" && (
           <section className="card">
             <div className="card__head">
@@ -969,6 +1190,24 @@ export default function Dashboard() {
                 ))}
               </ul>
             )}
+
+            {/* The question a family actually has about the phone on the side
+                table, answerable in one press instead of one missed dose. */}
+            <div className="selftest__run">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => checkItWorks(elder.id)}
+                disabled={testing}
+              >
+                {testing ? "Checking…" : "Check it works"}
+              </button>
+              <p className="muted">
+                Rings {elder.name}'s phone and checks every step of the chain.
+                Nothing is recorded against her medicines.
+              </p>
+              {selfTest && <SelfTestResult result={selfTest} />}
+            </div>
 
             {firebaseConfigured ? (
               <>

@@ -9,6 +9,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tests.fake_firestore import FakeFirestore  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def no_model_calls(monkeypatch):
+    """The analyst never runs in tests.
+
+    It is an optional layer over figures that are already final, so leaving it
+    live would make the suite slow, networked and non-deterministic in exchange
+    for testing nothing. The two things worth asserting — that its wording is
+    used when it arrives, and that its absence changes nothing — have their own
+    tests, which opt back in explicitly.
+    """
+    from app.services import narration_service
+
+    async def no_narration(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        narration_service.NarrationService, "narrate", no_narration
+    )
+    monkeypatch.setattr(
+        narration_service.NarrationService,
+        "narrate_blocking",
+        lambda *args, **kwargs: None,
+    )
+
+
 @pytest.fixture
 def db() -> FakeFirestore:
     return FakeFirestore()

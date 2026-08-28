@@ -318,6 +318,13 @@ class ReminderService:
             f"{elder['name']} still has not taken the {medication['name']}."
         )
 
+        # Only the rungs after the first. The push has already gone out with
+        # the plain sentence, which bought about five minutes of slack — so
+        # this is the one place a model can be allowed to run without anybody
+        # waiting on it. If it is slow, absent or wrong, `message` is still the
+        # sentence this file wrote, and the family still gets told.
+        message = self._narrated(event, elder, medication) or message
+
         self.notifications.notify_caregiver(
             elder,
             medication,
@@ -338,6 +345,38 @@ class ReminderService:
             "reason": event.get("escalation_reason") or "NOT_CONFIRMED",
             "message": message,
         }
+
+    def _narrated(self, event: dict, elder: dict, medication: dict) -> str | None:
+        """Better wording for an escalation, if the analyst can supply it.
+
+        Written back to the event so a third rung says the same thing as the
+        second, and so an alert is never narrated twice.
+        """
+        existing = event.get("escalation_narrative")
+        if existing:
+            return existing
+
+        # Imported here, not at module scope: the worker is the hot path and
+        # has no business dragging the model libraries in on every cold start
+        # just so an optional sentence is available five minutes later.
+        from app.services.adherence_service import AdherenceService
+        from app.services.narration_service import NarrationService
+
+        try:
+            brief = AdherenceService(self.db).dose_brief(event, elder, medication)
+            narrative = NarrationService().narrate_blocking(
+                "escalation", brief, event["id"]
+            )
+        except Exception as exc:
+            logger.warning("Could not narrate escalation %s: %s", event["id"], exc)
+            return None
+
+        if narrative:
+            self.events._ref(event["id"]).update(
+                {"escalation_narrative": narrative}
+            )
+
+        return narrative
 
     def _escalate(
         self,

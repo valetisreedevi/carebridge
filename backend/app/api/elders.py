@@ -3,6 +3,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.config import get_settings
+from app.models.adherence import build_ledger
+from app.services.adherence_service import plain_weekly_note
+
 from app.api.auth import (
     CAREGIVER_EMAILS,
     current_caregiver_id,
@@ -208,29 +212,24 @@ def get_history(
         elder_id, start, today + timedelta(days=1)
     )
 
-    buckets: dict[str, dict] = {}
-    for offset in range(days):
-        day = (start + timedelta(days=offset)).date().isoformat()
-        buckets[day] = {"date": day, "taken": 0, "missed": 0, "declined": 0, "total": 0}
+    by_day: dict[str, list[dict]] = {
+        (start + timedelta(days=offset)).date().isoformat(): []
+        for offset in range(days)
+    }
 
     for event in events:
         day = event["scheduled_at"].astimezone(tz).date().isoformat()
-        bucket = buckets.get(day)
-        if not bucket:
-            continue
+        if day in by_day:
+            by_day[day].append(event)
 
-        bucket["total"] += 1
-        status = event["status"]
-        if status == "TAKEN":
-            bucket["taken"] += 1
-        elif status == "DECLINED":
-            bucket["declined"] += 1
-        elif status == "ESCALATED":
-            bucket["missed"] += 1
-
+    # The same counting rule as today's headline, so a day cannot read one way
+    # in the strip and another way when you open it.
     return {
         "elder": {"id": elder["id"], "name": elder["name"], "timezone": str(tz)},
-        "days": list(buckets.values()),
+        "days": [
+            {"date": day, **build_ledger(group).to_dict()}
+            for day, group in by_day.items()
+        ],
     }
 
 
@@ -343,6 +342,14 @@ def get_today(
             # False means no reminder physically left the building, whatever
             # the attempt count says.
             "reached_a_phone": bool(event.get("reached_a_phone")),
+            # Recorded on her own device, or taken on the family's word. A week
+            # that is only green because somebody ticked it off from another
+            # city is a different week, and the row should say so.
+            "confirmed_source": event.get("confirmed_source"),
+            # She answered and CareBridge could not tell what she meant. Not a
+            # status — the dose did not move — but the family should see it.
+            "unclear_count": event.get("unclear_count", 0),
+            "last_unclear": (event.get("unclear_replies") or [{}])[-1].get("heard"),
             "confirmed_at": event.get("confirmed_at"),
             "acknowledged_at": event.get("acknowledged_at"),
             "escalated_at": event.get("escalated_at"),
@@ -368,7 +375,12 @@ def get_today(
                 "status": _unmaterialised_status(value, local_now),
                 "attempt": 0,
                 "max_attempts": medication.get("max_attempts"),
+                # Nothing has been attempted for a time the worker has not
+                # reached yet, so there is nothing to have failed at.
                 "reached_a_phone": True,
+                "confirmed_source": None,
+                "unclear_count": 0,
+                "last_unclear": None,
                 "confirmed_at": None,
                 "acknowledged_at": None,
                 "escalated_at": None,
@@ -379,4 +391,150 @@ def get_today(
         "elder": {"id": elder["id"], "name": elder["name"], "timezone": str(tz)},
         "date": local_now.date().isoformat(),
         "items": sorted(items, key=lambda i: i["local_time"]),
+        "ledger": build_ledger(events + _unmaterialised(items)).to_dict(),
+    }
+
+
+def _unmaterialised(items: list[dict]) -> list[dict]:
+    """Scheduled times the worker never turned into events, counted honestly.
+
+    They are real doses on a real plan, so leaving them out of the denominator
+    flatters the day. But nothing was ever delivered for them either — a time
+    already past with no event behind it means no reminder went out at all,
+    which is usually the scheduler stopped, not the elder ignoring anything.
+
+    Shaped like events so there is one counting rule rather than two.
+    """
+    return [
+        {
+            "status": "PENDING",
+            "reached_a_phone": False,
+            # A past time that never became an event has already failed;
+            # one still ahead has not been tried yet.
+            "attempt": 1 if item["status"] == "MISSED" else 0,
+        }
+        for item in items
+        if item["event_id"] is None
+        and item["status"] in ("MISSED", "UPCOMING")
+    ]
+
+
+@router.get("/elders/{elder_id}/insight")
+async def get_insight(
+    elder_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """The short weekly note: how the week went, and whether that is new.
+
+    The figures are computed in adherence_service and are already final when
+    this runs. The analyst agent is asked only to phrase them, and if it is
+    off, slow or unavailable the deterministic sentence is returned instead —
+    so the weekly note is a feature of CareBridge rather than a feature of
+    Gemini being up. `narrated` says which one you are reading.
+    """
+    firestore = deps.firestore_service()
+    require_elder_access(elder_id, caregiver_id, firestore)
+
+    brief = deps.adherence_service().weekly_brief(elder_id)
+    plain = plain_weekly_note(brief)
+
+    from app.services.narration_service import NarrationService
+
+    narrated = await NarrationService().narrate(
+        "weekly", brief, f"{elder_id}_{brief['week_starting']}"
+    )
+
+    return {
+        "elder_id": elder_id,
+        "week_starting": brief["week_starting"],
+        "note": narrated or plain,
+        "narrated": bool(narrated),
+        "plain_note": plain,
+        "this_week": brief["this_week"],
+        "usual": brief["usual"],
+        "what_changed": brief["what_changed"],
+    }
+
+
+@router.post("/elders/{elder_id}/self-test")
+def run_self_test(
+    elder_id: str,
+    caregiver_id: str = Depends(current_caregiver_id),
+):
+    """Proves the whole chain works, before the evening it has to.
+
+    Every silent failure this project has actually hit is on this list: a phone
+    that was never paired, a caregiver with no address on file, SMTP that was
+    never configured, a timezone left on the setter-up's own. Each one is
+    invisible until a dose is missed, and by then the answer arrives as
+    "she has not confirmed" — which reads as a person, not as plumbing.
+
+    Sends a real notification. Creates no dose and changes no record.
+    """
+    firestore = deps.firestore_service()
+    elder = require_elder_access(elder_id, caregiver_id, firestore)
+
+    push = deps.notification_service().send_self_test(elder)
+    settings = get_settings()
+
+    caregivers = [
+        firestore.get_caregiver(cid) or {}
+        for cid in (elder.get("caregiver_ids") or [])
+    ]
+    with_email = [c for c in caregivers if c.get("email")]
+    medications = firestore.list_medications_for_elder(elder_id)
+
+    checks = [
+        {
+            "check": "A phone is paired",
+            "ok": push["devices"] > 0,
+            "detail": (
+                f"{push['devices']} paired"
+                if push["devices"]
+                else f"No phone is set up, so nothing can reach {elder['name']}."
+            ),
+        },
+        {
+            "check": "The notification arrived",
+            "ok": push["delivered_to"] > 0,
+            "detail": (
+                f"Sent to {push['delivered_to']} of {push['devices']}."
+                if push["devices"]
+                else "Nothing to send to yet."
+            ),
+        },
+        {
+            "check": "Somebody is on file to be told",
+            "ok": bool(with_email),
+            "detail": (
+                ", ".join(c["email"] for c in with_email)
+                if with_email
+                else "No email address on file, so an escalation has nowhere to go."
+            ),
+        },
+        {
+            "check": "Escalation email is configured",
+            "ok": settings.email_configured,
+            "detail": (
+                "Ready."
+                if settings.email_configured
+                else "SMTP is not set up on this deployment."
+            ),
+        },
+        {
+            "check": f"{elder['name']}'s timezone is set",
+            "ok": bool(elder.get("timezone")),
+            "detail": elder.get("timezone") or "Not set — doses would be hours out.",
+        },
+        {
+            "check": "There is something to remind about",
+            "ok": bool(medications),
+            "detail": f"{len(medications)} active",
+        },
+    ]
+
+    return {
+        "elder_id": elder_id,
+        "ok": all(c["ok"] for c in checks),
+        "checks": checks,
     }

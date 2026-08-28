@@ -208,8 +208,60 @@ export type DayItem = {
   max_attempts: number | null;
   /** False when no reminder physically left the building. */
   reached_a_phone: boolean;
+  /** "ELDER" when she answered on her own phone, "CAREGIVER" when the family
+   *  recorded it on her behalf. A week that is only green because somebody
+   *  ticked it off from another city is a different week. */
+  confirmed_source: string | null;
+  /** She answered and CareBridge could not tell what she meant. */
+  unclear_count: number;
+  last_unclear: string | null;
   confirmed_at: string | null;
   acknowledged_at: string | null;
+};
+
+/** Doses counted along both axes: what we managed to ask about, and what she
+ *  said. `scheduled === asked + unreachable + not_yet_due`, always — the
+ *  numbers are shown to families precisely because they add up. */
+export type Ledger = {
+  scheduled: number;
+  asked: number;
+  unreachable: number;
+  not_yet_due: number;
+  taken: number;
+  declined: number;
+  no_answer: number;
+  waiting: number;
+  cancelled: number;
+  taken_on_trust: number;
+  unclear: number;
+};
+
+export type Insight = {
+  week_starting: string;
+  note: string;
+  /** False when the note is the deterministic one. The weekly note is a
+   *  feature of CareBridge, not of the model being up. */
+  narrated: boolean;
+  plain_note: string;
+  this_week: Ledger & {
+    adherence_of_asked: number | null;
+    median_minutes_to_taken: number | null;
+  };
+  usual: Ledger & {
+    adherence_of_asked: number | null;
+    median_minutes_to_taken: number | null;
+  };
+  what_changed: {
+    metric: string;
+    now: number;
+    usual: number;
+    direction: "worse" | "better" | "ours_to_fix";
+  }[];
+};
+
+export type SelfTest = {
+  ok: boolean;
+  checks: { check: string; ok: boolean; detail: string }[];
 };
 
 export type CareTeamMember = {
@@ -219,13 +271,7 @@ export type CareTeamMember = {
   is_you: boolean;
 };
 
-export type HistoryDay = {
-  date: string;
-  taken: number;
-  missed: number;
-  declined: number;
-  total: number;
-};
+export type HistoryDay = Ledger & { date: string };
 
 /** A phone set up to receive someone's reminders. Never carries the
  *  notification token — the dashboard has no use for a phone's address. */
@@ -338,9 +384,21 @@ export const api = {
   },
 
   today: (elderId: string) =>
-    request<{ elder: Elder; date: string; items: DayItem[] }>(
-      `/api/elders/${elderId}/today`,
-    ),
+    request<{
+      elder: Elder;
+      date: string;
+      items: DayItem[];
+      ledger: Ledger;
+    }>(`/api/elders/${elderId}/today`),
+
+  /** The week in a sentence, plus the figures behind it. */
+  insight: (elderId: string) =>
+    request<Insight>(`/api/elders/${elderId}/insight`),
+
+  /** Rings the phone with nothing attached, and reports which link is broken.
+   *  Creates no dose — pressing it must not invent a tablet. */
+  selfTest: (elderId: string) =>
+    request<SelfTest>(`/api/elders/${elderId}/self-test`, { method: "POST" }),
 
   alerts: () => request<Alert[]>("/api/caregivers/me/alerts"),
 

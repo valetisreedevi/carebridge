@@ -221,6 +221,42 @@ class MedicationEventService:
         self._ref(event_id).update(updates)
         return {**(self.get_event(event_id) or {}), **updates}
 
+    def record_unclear_reply(self, event_id: str, heard: str, keep: int = 5) -> dict:
+        """The elder answered, and CareBridge could not tell what she meant.
+
+        Deliberately not a status. An unintelligible reply does not move the
+        dose anywhere — she has not taken it, refused it or put it off — so
+        writing it into the state machine would mean inventing a lifecycle
+        stage for something that is really an observation about the
+        conversation. The reminder carries on exactly as it would have.
+
+        What it does change is the count, and the count is what acts: two
+        replies nobody could interpret is not a model problem to keep
+        retrying, it is a person who cannot use this tonight, and somebody
+        should be told while there is still time to phone.
+        """
+
+        @firestore.transactional
+        def apply(transaction, ref):
+            snapshot = ref.get(transaction=transaction)
+            if not snapshot.exists:
+                raise KeyError(event_id)
+
+            data = snapshot.to_dict()
+            trail = list(data.get("unclear_replies") or [])
+            trail.append({"at": datetime.now(timezone.utc), "heard": heard})
+
+            updates = {
+                # Trimmed, because this is evidence for a caregiver deciding
+                # whether to ring, not a transcript archive.
+                "unclear_replies": trail[-keep:],
+                "unclear_count": data.get("unclear_count", 0) + 1,
+            }
+            transaction.update(ref, updates)
+            return {"id": event_id, **data, **updates}
+
+        return apply(self.db.transaction(), self._ref(event_id))
+
     def confirm_by_caregiver(self, event_id: str, caregiver_id: str) -> dict:
         """Records a dose on the word of the family, not the elder's device.
 

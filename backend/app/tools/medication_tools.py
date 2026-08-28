@@ -9,6 +9,7 @@ import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from app.config import get_settings
 from app.models.medication import FOOD_INSTRUCTION_TEXT, FoodInstruction
 from app.models.medication_event import InvalidTransition
 from app.services.firestore_service import FirestoreService
@@ -220,6 +221,69 @@ def record_decline(reason: str) -> dict:
     }
 
 
+def report_unclear_reply(what_you_heard: str) -> dict:
+    """Report that the elder said something you could not interpret.
+
+    Call this when you genuinely cannot tell what the elder means and asking
+    again has not helped - mumbling, a reply that does not answer the question,
+    speech you cannot make out, or an answer about something else entirely.
+    Pass what you heard as closely as you can, in their own words.
+
+    This does not change the reminder. It keeps a record for the family, and if
+    it happens repeatedly it asks them to get in touch. Prefer this over
+    guessing: an unclear answer recorded honestly is worth more than a
+    confirmation nobody actually gave.
+    """
+    context, event, error = _resolve()
+    if error:
+        return {"success": False, "message": error}
+
+    settings = get_settings()
+    events = MedicationEventService()
+
+    try:
+        updated = events.record_unclear_reply(event["id"], what_you_heard.strip())
+    except KeyError:
+        return {"success": False, "message": "That reminder could not be found."}
+
+    count = updated.get("unclear_count", 1)
+    if count < settings.max_unclear_replies:
+        return {
+            "success": True,
+            "recorded": True,
+            "caregiver_told": False,
+            "message": "Noted. Ask them once more, in different words.",
+        }
+
+    # The threshold is checked here, not judged by the model. Whether somebody
+    # should be interrupted is not a question a language model should be
+    # answering turn by turn.
+    firestore = FirestoreService()
+    elder = firestore.get_elder(context.elder_id) or {}
+    medication = firestore.get_medication(event["medication_id"]) or {}
+
+    if elder:
+        NotificationService().notify_caregiver(
+            elder,
+            medication,
+            event,
+            reason="NOT_UNDERSTOOD",
+            message=(
+                f"CareBridge could not understand {elder.get('name')} about the "
+                f"{medication.get('name')}. The reply was: "
+                f"\"{what_you_heard.strip()}\". "
+                "Nothing has been recorded either way."
+            ),
+        )
+
+    return {
+        "success": True,
+        "recorded": True,
+        "caregiver_told": True,
+        "message": "Noted, and their caregiver has been asked to get in touch.",
+    }
+
+
 def notify_caregiver(message: str) -> dict:
     """Ask the elder's caregiver to get in touch.
 
@@ -261,5 +325,6 @@ ALL_TOOLS = [
     confirm_medication_taken,
     snooze_reminder,
     record_decline,
+    report_unclear_reply,
     notify_caregiver,
 ]

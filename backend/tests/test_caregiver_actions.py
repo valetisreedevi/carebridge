@@ -138,7 +138,15 @@ def test_history_covers_the_requested_days(client):
 
     assert len(body["days"]) == 7
     assert body["elder"]["name"] == "Nanna"
-    assert all(set(day) >= {"date", "taken", "missed", "total"} for day in body["days"])
+    assert all(
+        set(day) >= {"date", "scheduled", "asked", "taken", "no_answer"}
+        for day in body["days"]
+    )
+
+    # Every day balances: what was scheduled is what was asked about, plus what
+    # never reached a phone, plus what has not come round yet.
+    for day in body["days"]:
+        assert day["scheduled"] == day["asked"] + day["unreachable"] + day["not_yet_due"]
 
 
 def test_history_counts_a_dose_the_caregiver_recorded(client):

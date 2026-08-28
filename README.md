@@ -53,7 +53,7 @@ that fires the reminder immediately instead of waiting for the clock. Then
 
 ```bash
 cd backend
-pytest                       # 33 tests, no network needed
+pytest                       # 229 tests, no network needed
 python scripts/e2e_demo.py   # real Firestore, real GCS, real Gemini
 ```
 
@@ -83,14 +83,46 @@ so a race between the elder tapping "I took it" and the worker escalating
 cannot produce a confused record.
 
 **The agent decides what the elder meant. The backend decides what happens.**
-The agent has six tools and no other database access. None of them takes an
+The agent has seven tools and no other database access. None of them takes an
 elder id or an event id as an argument — those come from an ambient request
 context set from the caller's credentials, so the model cannot reach another
 family's records by inventing an identifier.
 
     get_current_reminder      get_medication_instructions
     confirm_medication_taken  snooze_reminder
-    record_decline            notify_caregiver
+    record_decline            report_unclear_reply
+    notify_caregiver
+
+`report_unclear_reply` is the one that does nothing. When the model cannot tell
+what an answer meant it says so, instead of choosing the likeliest reading: the
+dose does not move, what was heard is kept, and after the second one a person
+is asked to step in. That threshold is a counter in the backend, never a
+judgement the model makes turn by turn.
+
+**Two numbers, kept apart.** Adherence products almost universally report doses
+taken over doses scheduled, which turns a phone nobody set up into a woman
+ignoring her tablets. Every figure here comes from `models/adherence.py`, which
+counts reach and outcome separately and partitions exactly:
+
+    scheduled == asked + unreachable + not_yet_due
+
+The dashboard shows all three, so a family can add them up rather than trust
+them. `services/adherence_service.py` computes every rate, median and
+week-on-week comparison in plain Python.
+
+**The second agent explains; it never decides.** `adherence_analyst_agent` has
+no tools at all — it cannot read the database or reach a household. It is handed
+a brief of figures that are already final and asked to write them out for a
+worried family. That is what makes a model safe here: by the time it runs, the
+decision is made and the first alert has already been sent.
+
+The escalation ladder shows the rule directly. Rung one is a push carrying the
+sentence the backend wrote, sent immediately. Rung two, five minutes later, is
+an email carrying the analyst's wording — and if the analyst is slow, off or
+broken, it carries the same plain sentence rung one did. **The alert never waits
+for the model.** The weekly note behaves the same way: `plain_weekly_note` is
+what a family reads when Gemini is unavailable, so the note is a feature of
+CareBridge rather than of the model being up.
 
 ## Safety rules, and where they live
 
@@ -103,6 +135,10 @@ family's records by inventing an identifier.
 | Finished events cannot be reopened            | `medication_event.ALLOWED_TRANSITIONS` |
 | Silence is "not confirmed", never "not taken" | `reminder_service._escalate`      |
 | One family cannot see another's records       | `auth.require_elder_access`       |
+| An answer nobody understood is recorded, not guessed | `medication_tools.report_unclear_reply` |
+| Two unclear replies fetch a human             | `settings.max_unclear_replies`    |
+| Adherence is never divided by undelivered doses | `adherence_service.adherence_of_asked` |
+| An escalation is never delayed by the analyst | `reminder_service._narrated`      |
 
 Every one of these has a test.
 
@@ -154,7 +190,7 @@ Note that Gemini 3.x is served from Vertex's **global** endpoint, not a region.
 
 Live on Cloud Run as `carebridge-api` (revision `00003-zgw`, `us-central1`),
 deployed `--no-allow-unauthenticated` so only identities holding `run.invoker`
-can call it � currently the project owner and the scheduler service account.
+can call it — currently the project owner and the scheduler service account.
 
 Cloud Scheduler drives `POST /api/internal/reminders/process` every minute,
 and that loop is verified in production, not just locally:
