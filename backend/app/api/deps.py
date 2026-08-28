@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from app.services.adherence_service import AdherenceService
 from app.services.conversation_service import ConversationService
 from app.services.firestore_service import FirestoreService
 from app.services.medication_event_service import MedicationEventService
@@ -36,3 +37,8 @@ def storage_service() -> StorageService:
 @lru_cache
 def conversation_service() -> ConversationService:
     return ConversationService()
+
+
+@lru_cache
+def adherence_service() -> AdherenceService:
+    return AdherenceService()

@@ -43,6 +43,21 @@ class Settings(BaseSettings):
     max_snoozes: int = 3
     escalate_after_minutes: int = 90
 
+    # How many replies nobody could interpret before a person is asked to
+    # step in. One is a bad microphone or a passing lorry. Two in a row is
+    # somebody who cannot use this tonight, and a machine that keeps trying is
+    # the wrong answer to that.
+    max_unclear_replies: int = 2
+
+    # The offline analyst. It never decides anything: it phrases figures that
+    # were already computed, on channels that have already been sent, so it is
+    # safe for it to be slow, wrong or entirely absent.
+    analyst_enabled: bool = os.getenv("ANALYST_ENABLED", "true").lower() == "true"
+
+    # A hard ceiling on how long a caregiver's alert may wait for nicer words.
+    # Past this the deterministic sentence goes out unchanged.
+    analyst_timeout_seconds: float = float(os.getenv("ANALYST_TIMEOUT_SECONDS", "8"))
+
     # How a caregiver is reached, in order, each step tried only if the one
     # before it went unanswered. Push alone fails closed and silently: no
     # granted permission means the alert is a database row nobody sees.
