@@ -147,6 +147,15 @@ class AcceptInviteRequest(BaseModel):
 
 
 class RedeemPairingCodeRequest(BaseModel):
-    """The code an elder types into their phone."""
+    """The code an elder types into their phone.
+
+    A native app may offer its notification address at the same time. Doing it
+    here rather than in a second, authenticated call means a phone is reachable
+    the moment it is paired, without the app having to sign in first — and an
+    elder's phone that cannot be pushed to is not paired in any useful sense.
+    """
 
     code: str = Field(min_length=6, max_length=32)
+    fcm_token: str | None = Field(default=None, min_length=10, max_length=4096)
+    platform: str = Field(default="WEB", max_length=16)
+    label: str | None = Field(default=None, max_length=60)

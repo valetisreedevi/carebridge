@@ -88,8 +88,23 @@ def redeem_pairing_code(request: RedeemPairingCodeRequest):
     if not elder:
         raise refusal
 
+    # A phone that offers its address gets registered here, on the strength of
+    # the code it just spent. The alternative is a second call it cannot make
+    # until it has signed in, which leaves a window where the phone believes it
+    # is paired and no reminder can reach it.
+    registered = False
+    if request.fcm_token:
+        firestore.register_device(
+            elder_id=elder["id"],
+            fcm_token=request.fcm_token,
+            platform=request.platform,
+            label=request.label,
+        )
+        registered = True
+
     return {
         "elder_id": elder["id"],
         "elder_name": elder["name"],
         "custom_token": mint_elder_pairing_token(elder["id"]),
+        "device_registered": registered,
     }

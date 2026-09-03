@@ -212,3 +212,63 @@ def test_two_phones_racing_the_same_code_do_not_both_pair(
 
     assert first is not None
     assert second is None
+
+
+# ---------------- the phone offering its address as it pairs ----------------
+
+
+def test_a_phone_can_offer_its_address_while_redeeming(
+    client, firebase, firestore_service, family
+):
+    """Otherwise there is a window where the phone is paired and unreachable.
+
+    Registering separately means a second call the app cannot make until it has
+    signed in. Until it does, the dashboard says the phone is paired and no
+    reminder can arrive at it, which is the worst of both.
+    """
+    code = _mint(client, family["amma"])["code"]
+
+    body = client.post(
+        "/api/pairing/redeem",
+        json={
+            "code": code,
+            "fcm_token": "a-token-from-ammas-android",
+            "platform": "ANDROID",
+        },
+    ).json()
+
+    assert body["device_registered"] is True
+
+    [device] = firestore_service.list_devices_for_elder(family["amma"])
+    assert device["platform"] == "ANDROID"
+
+
+def test_redeeming_without_a_token_still_works(client, firebase, family):
+    """The browser client pairs first and registers later, and still may."""
+    code = _mint(client, family["amma"])["code"]
+
+    body = client.post("/api/pairing/redeem", json={"code": code}).json()
+
+    assert body["device_registered"] is False
+    assert body["custom_token"]
+
+
+def test_a_phone_offering_an_address_lands_on_the_person_it_paired_with(
+    client, firebase, firestore_service, family
+):
+    """A token registered against the wrong elder reminds the wrong person."""
+    nanna_code = _mint(client, family["nanna"])["code"]
+
+    client.post(
+        "/api/pairing/redeem",
+        json={
+            "code": nanna_code,
+            "fcm_token": "a-token-from-nannas-phone",
+            "platform": "ANDROID",
+        },
+    )
+
+    assert firestore_service.get_device_tokens(family["nanna"]) == [
+        "a-token-from-nannas-phone"
+    ]
+    assert firestore_service.get_device_tokens(family["amma"]) == []
