@@ -7,8 +7,24 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Lets the reminder take over the screen when the phone is locked, which
-         is the whole point: the elder should not have to open an app. -->
+         is the whole point: the elder should not have to open an app.
+         Since Android 14 declaring this is not enough — it is only granted on
+         install to clocks and diallers, and anything else has to send the user
+         to Settings to turn it on. MainActivity does that during pairing. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Doze can hold a reminder back until the phone next wakes, which for a
+         sleeping elder is the morning. Asked for once, during setup. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Without this, package visibility on targetSdk 35 makes
+         SpeechRecognizer.isRecognitionAvailable() return false and the
+         microphone button silently disappears. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".CareBridgeApp"

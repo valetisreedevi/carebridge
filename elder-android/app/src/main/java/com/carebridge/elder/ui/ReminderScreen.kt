@@ -44,6 +44,8 @@ fun ReminderScreen(
     onTaken: () -> Unit,
     onSnooze: () -> Unit,
 ) {
+    // Whose language, not the handset's. See Copy.
+    val language = state.reminder?.language
     if (state.loading) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -61,7 +63,7 @@ fun ReminderScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Nothing to take right now", fontSize = 30.sp, color = Ink)
+            Text(Copy.nothingDue(language), fontSize = 30.sp, color = Ink)
             Text(
                 state.notice ?: "CareBridge will let you know when it is time.",
                 fontSize = 20.sp,
@@ -81,7 +83,7 @@ fun ReminderScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "Medicine time",
+            Copy.medicineTime(language),
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
             color = Ink,
@@ -99,7 +101,7 @@ fun ReminderScreen(
         }
 
         Text(
-            reminder.medicationName,
+            reminder.medicationName ?: "Your medicine",
             fontSize = 40.sp,
             fontWeight = FontWeight.Bold,
             color = Ink,
@@ -107,14 +109,16 @@ fun ReminderScreen(
             modifier = Modifier.padding(top = 24.dp),
         )
 
-        Text(reminder.dose, fontSize = 30.sp, color = Ink)
+        reminder.dose?.let { Text(it, fontSize = 30.sp, color = Ink) }
 
-        Text(
-            "Take it ${reminder.foodInstruction}",
-            fontSize = 24.sp,
-            color = Muted,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+        reminder.foodInstruction?.let {
+            Text(
+                "Take it $it",
+                fontSize = 24.sp,
+                color = Muted,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
 
         state.turns.takeLast(4).forEach { turn ->
             Text(
@@ -147,7 +151,7 @@ fun ReminderScreen(
                     .padding(top = 28.dp),
             ) {
                 Text(
-                    if (listening) "Listening…" else "Speak to CareBridge",
+                    if (listening) Copy.listening(language) else Copy.speakToCareBridge(language),
                     fontSize = 24.sp,
                 )
             }
@@ -163,7 +167,7 @@ fun ReminderScreen(
                 .height(84.dp)
                 .padding(top = 16.dp),
         ) {
-            Text("I took it", fontSize = 28.sp, color = Color.White)
+            Text(Copy.tookIt(language), fontSize = 28.sp, color = Color.White)
         }
 
         OutlinedButton(
@@ -175,7 +179,7 @@ fun ReminderScreen(
                 .height(84.dp)
                 .padding(top = 12.dp),
         ) {
-            Text("Remind me later", fontSize = 26.sp, color = Ink)
+            Text(Copy.remindLater(language), fontSize = 26.sp, color = Ink)
         }
 
         Text(

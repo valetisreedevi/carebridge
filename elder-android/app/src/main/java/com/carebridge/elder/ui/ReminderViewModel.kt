@@ -57,12 +57,12 @@ class ReminderViewModel : ViewModel() {
 
     fun markTaken() = act { eventId ->
         ApiClient.api.markTaken(eventId)
-        "Thank you. I have recorded it."
+        Copy.recordedThanks(state.value.reminder?.language)
     }
 
     fun snooze(minutes: Int = 10) = act { eventId ->
         ApiClient.api.snooze(eventId, SnoozeBody(minutes))
-        "Alright, I will remind you again in $minutes minutes."
+        Copy.willRemindInTen(state.value.reminder?.language)
     }
 
     fun decline(reason: String) = act { eventId ->

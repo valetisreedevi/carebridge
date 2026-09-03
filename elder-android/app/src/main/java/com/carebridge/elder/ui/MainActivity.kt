@@ -1,10 +1,14 @@
 package com.carebridge.elder.ui
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -34,7 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
-import com.carebridge.elder.data.RegisterDeviceBody
+import com.carebridge.elder.data.RedeemBody
 import com.carebridge.elder.notify.ensureReminderChannel
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Dispatchers
@@ -66,21 +70,65 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun PairingScreen() {
     val context = LocalContext.current
-    var elderId by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    val askNotifications = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
+    var permissionNote by remember { mutableStateOf<String?>(null) }
+
+    // Everything the phone needs is asked for here, once, while a family
+    // member is holding it. An elder woken at 8am must never meet a dialog.
+    val askPermissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted[Manifest.permission.POST_NOTIFICATIONS] == false) {
+            permissionNote = "Notifications are turned off, so reminders cannot show."
+        }
+    }
 
     LaunchedEffect(Unit) {
+        val wanted = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                context, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
+            wanted += Manifest.permission.POST_NOTIFICATIONS
+        }
 
-            if (!granted) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val missing = wanted.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) askPermissions.launch(missing.toTypedArray())
+
+        // Not a runtime permission: Android 14 hands this one out only to
+        // clocks and diallers, and everyone else has to be sent to Settings.
+        // Skipping it costs nothing visible until the screen is locked, which
+        // is the only time it matters.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val notifications = context.getSystemService(NotificationManager::class.java)
+            if (notifications?.canUseFullScreenIntent() == false) {
+                permissionNote =
+                    "One more: allow CareBridge to show reminders on a locked screen."
+                runCatching {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                    )
+                }
+            }
+        }
+
+        // Doze would otherwise be free to hold a dose until the phone is next
+        // picked up, which for an elder asleep at 8am is far too late.
+        val power = context.getSystemService(PowerManager::class.java)
+        if (power?.isIgnoringBatteryOptimizations(context.packageName) == false) {
+            runCatching {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:${context.packageName}"),
+                    )
+                )
+            }
         }
     }
 
@@ -99,31 +147,46 @@ private fun PairingScreen() {
         )
 
         OutlinedTextField(
-            value = elderId,
-            onValueChange = { elderId = it.trim() },
+            value = code,
+            onValueChange = { code = it.trim() },
             label = { Text("Code") },
             modifier = Modifier.fillMaxWidth(),
         )
 
         Button(
             onClick = {
-                Pairing.save(context, elderId)
                 status = "Pairing…"
 
+                // The code is spent and the phone's address handed over in one
+                // call. Nothing is saved until the server has accepted it —
+                // saving first meant a mistyped code left the app permanently
+                // "paired" to nothing, with no screen anywhere to undo it.
                 FirebaseMessaging.getInstance().token
                     .addOnSuccessListener { token ->
                         scope.launch {
-                            val registered = withContext(Dispatchers.IO) {
+                            val paired = withContext(Dispatchers.IO) {
                                 runCatching {
-                                    ApiClient.api.registerDevice(
-                                        RegisterDeviceBody(elderId, token)
+                                    ApiClient.api.redeemPairingCode(
+                                        RedeemBody(
+                                            code = code,
+                                            fcmToken = token,
+                                            platform = "ANDROID",
+                                            label = Build.MODEL,
+                                        )
                                     )
                                 }
                             }
-                            status = if (registered.isSuccess) {
-                                "Ready. Reminders will arrive here."
-                            } else {
-                                "Could not reach CareBridge. Check the code."
+
+                            paired.onSuccess { reply ->
+                                Pairing.save(context, reply.elderId)
+                                status = if (reply.deviceRegistered) {
+                                    "Ready. This is ${reply.elderName}'s phone."
+                                } else {
+                                    "Paired, but this phone cannot be reminded yet."
+                                }
+                            }
+                            paired.onFailure {
+                                status = "That code did not work. Ask for a new one."
                             }
                         }
                     }
@@ -131,7 +194,7 @@ private fun PairingScreen() {
                         status = "This phone cannot receive reminders yet."
                     }
             },
-            enabled = elderId.length > 4,
+            enabled = code.length > 4,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(68.dp)
@@ -142,6 +205,10 @@ private fun PairingScreen() {
 
         status?.let {
             Text(it, fontSize = 18.sp, modifier = Modifier.padding(top = 16.dp))
+        }
+
+        permissionNote?.let {
+            Text(it, fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
         }
     }
 }
