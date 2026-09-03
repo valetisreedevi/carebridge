@@ -364,15 +364,35 @@ class FirestoreService:
             ),
         )
 
-    def get_device_tokens(self, elder_id: str) -> list[str]:
-        tokens = []
+    def get_device_targets(self, elder_id: str) -> list[dict]:
+        """The phones to push to, each with the kind of client it is.
+
+        A browser and a native Android app need differently shaped messages —
+        an Android app that is asleep never sees a message carrying a
+        notification block, because the system tray swallows it before any of
+        the app's own code runs. The sender cannot tell the two apart from a
+        bare token, so the platform has to travel with it.
+        """
+        targets, seen = [], set()
+
         for query in self._device_queries(elder_id):
             for snapshot in query.stream():
                 data = snapshot.to_dict()
-                if data.get("active") and data["fcm_token"] not in tokens:
-                    tokens.append(data["fcm_token"])
+                token = data.get("fcm_token")
 
-        return tokens
+                if not data.get("active") or not token or token in seen:
+                    continue
+
+                seen.add(token)
+                targets.append({
+                    "fcm_token": token,
+                    "platform": data.get("platform"),
+                })
+
+        return targets
+
+    def get_device_tokens(self, elder_id: str) -> list[str]:
+        return [target["fcm_token"] for target in self.get_device_targets(elder_id)]
 
     # ---------------- medications ----------------
 

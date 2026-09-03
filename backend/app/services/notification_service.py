@@ -43,30 +43,76 @@ class NotificationService:
         ref.set({**payload, "created_at": datetime.now(timezone.utc)})
         return ref.id
 
-    def _push(self, tokens: list[str], title: str, body: str, data: dict) -> int:
+    def _send(
+        self,
+        tokens: list[str],
+        title: str,
+        body: str,
+        data: dict,
+        data_only: bool,
+    ) -> int:
         if not FCM_AVAILABLE or not tokens:
             return 0
 
-        message = messaging.MulticastMessage(
-            tokens=tokens,
-            notification=messaging.Notification(title=title, body=body),
-            data={k: str(v) for k, v in data.items()},
-            android=messaging.AndroidConfig(
-                priority="high",
-                notification=messaging.AndroidNotification(
-                    channel_id="carebridge_reminders",
-                    priority="max",
-                    default_sound=True,
-                    visibility="public",
+        payload = {k: str(v) for k, v in data.items()}
+
+        if data_only:
+            # The native app has to receive this itself. A message carrying a
+            # notification block is drawn by the system tray and the app's own
+            # code is never run while the phone is asleep — which is the only
+            # moment that matters, because it is the moment nobody is looking
+            # at the screen. Data-only keeps the delivery in the app's hands so
+            # it can take over the locked screen and speak.
+            #
+            # Title and body ride along so the app can word its own
+            # notification without waiting for an API round trip.
+            message = messaging.MulticastMessage(
+                tokens=tokens,
+                data={**payload, "title": title, "body": body},
+                android=messaging.AndroidConfig(priority="high"),
+            )
+        else:
+            message = messaging.MulticastMessage(
+                tokens=tokens,
+                notification=messaging.Notification(title=title, body=body),
+                data=payload,
+                android=messaging.AndroidConfig(
+                    priority="high",
+                    notification=messaging.AndroidNotification(
+                        channel_id="carebridge_reminders",
+                        priority="max",
+                        default_sound=True,
+                        visibility="public",
+                    ),
                 ),
-            ),
-        )
+            )
+
         try:
             response = messaging.send_each_for_multicast(message)
             return response.success_count
         except Exception as exc:
             logger.exception("FCM send failed: %s", exc)
             return 0
+
+    def _push(self, tokens: list[str], title: str, body: str, data: dict) -> int:
+        """Sends to browsers, which want the tray to draw the notification."""
+        return self._send(tokens, title, body, data, data_only=False)
+
+    def _push_to_devices(
+        self,
+        targets: list[dict],
+        title: str,
+        body: str,
+        data: dict,
+    ) -> int:
+        """Sends to an elder's phones, shaped for whatever each one is."""
+        android = [t["fcm_token"] for t in targets if t.get("platform") == "ANDROID"]
+        browsers = [t["fcm_token"] for t in targets if t.get("platform") != "ANDROID"]
+
+        return (
+            self._send(android, title, body, data, data_only=True)
+            + self._send(browsers, title, body, data, data_only=False)
+        )
 
     def _caregiver_emails(self, caregiver_ids: list[str]) -> list[str]:
         """Where to write, falling back to whoever they signed in as.
@@ -160,9 +206,9 @@ class NotificationService:
             "elder_id": elder["id"],
         }
 
-        tokens = self.firestore.get_device_tokens(elder["id"])
-        delivered = self._push(
-            tokens,
+        targets = self.firestore.get_device_targets(elder["id"])
+        delivered = self._push_to_devices(
+            targets,
             title="Medicine time",
             body=f"{medication['name']} - {medication['dose']}",
             data=data,
@@ -174,7 +220,7 @@ class NotificationService:
             "attempt": event.get("attempt", 0) + 1,
             "audience": "ELDER",
             "delivered_to": delivered,
-            "device_count": len(tokens),
+            "device_count": len(targets),
         })
 
         logger.info(
@@ -194,9 +240,9 @@ class NotificationService:
         must not be able to invent a tablet by doing so, which is exactly what
         the old "trigger reminder" demo button used to do.
         """
-        tokens = self.firestore.get_device_tokens(elder["id"])
-        delivered = self._push(
-            tokens,
+        targets = self.firestore.get_device_targets(elder["id"])
+        delivered = self._push_to_devices(
+            targets,
             title="CareBridge is working",
             body=f"This is a test from {elder['name']}'s family. Nothing to do.",
             data={"type": "SELF_TEST", "elder_id": elder["id"]},
@@ -207,10 +253,10 @@ class NotificationService:
             "elder_id": elder["id"],
             "audience": "ELDER",
             "delivered_to": delivered,
-            "device_count": len(tokens),
+            "device_count": len(targets),
         })
 
-        return {"devices": len(tokens), "delivered_to": delivered}
+        return {"devices": len(targets), "delivered_to": delivered}
 
     def notify_caregiver(
         self,
