@@ -1,9 +1,14 @@
+import logging
 from datetime import timedelta
 from functools import lru_cache
 
+import google.auth
+from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.cloud import storage
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 AUDIO_TYPES = {"audio/mpeg", "audio/mp4", "audio/webm", "audio/wav", "audio/ogg"}
@@ -73,17 +78,40 @@ class StorageService:
     def signed_url(self, object_name: str, minutes: int = 60) -> str | None:
         """Direct browser/app access without proxying through the API.
 
-        Requires a service account with a private key. On user credentials
-        (local ADC) signing is unavailable, and callers fall back to the
-        streaming media endpoint.
+        On Cloud Run there is no private key to sign with — the runtime holds
+        a token, not a key — so signing has to go through the IAM signBlob API
+        instead, which needs the service account's own name and token passed
+        in. Without that this raised every time and silently returned None,
+        and every caller quietly fell back to the streaming endpoint. That
+        endpoint needs an Authorization header, which an image loader and a
+        media player do not send, so the elder saw no photo and heard no voice
+        with nothing anywhere reporting a failure.
         """
+        blob = self.bucket.blob(object_name)
+        expiration = timedelta(minutes=minutes)
+
         try:
-            return self.bucket.blob(object_name).generate_signed_url(
-                version="v4",
-                expiration=timedelta(minutes=minutes),
-                method="GET",
+            return blob.generate_signed_url(
+                version="v4", expiration=expiration, method="GET"
             )
-        except Exception:
+        except Exception as exc:
+            logger.info("Direct signing unavailable (%s); trying IAM", exc)
+
+        try:
+            credentials, _ = google.auth.default()
+            credentials.refresh(GoogleAuthRequest())
+
+            return blob.generate_signed_url(
+                version="v4",
+                expiration=expiration,
+                method="GET",
+                service_account_email=credentials.service_account_email,
+                access_token=credentials.token,
+            )
+        except Exception as exc:
+            # Loudly. A silent None here costs the elder the photo and the
+            # voice, which is most of what the reminder is.
+            logger.warning("Could not sign %s: %s", object_name, exc)
             return None
 
 

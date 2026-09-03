@@ -32,6 +32,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.carebridge.elder.notify.showTestReminder
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,13 +68,104 @@ class MainActivity : ComponentActivity() {
 
         val paired = Pairing.load(this)
 
-        if (paired != null) {
-            startActivity(Intent(this, ReminderActivity::class.java))
-            finish()
-            return
+        // Paired but signed out reads every reminder as "cannot reach
+        // CareBridge", because the API ignores anything without a token. Send
+        // that phone back to setup instead of on to a screen that cannot work.
+        val ready = paired != null && ApiClient.isSignedIn()
+
+        setContent {
+            if (ready) ReadyScreen(
+                onShowMedicine = {
+                    startActivity(Intent(this, ReminderActivity::class.java))
+                },
+            ) else PairingScreen()
+        }
+    }
+}
+
+/**
+ * What the family sees once the phone is paired.
+ *
+ * Not for the elder — she is reached by the reminder itself and never opens
+ * this. It exists because every permission that stops a reminder working
+ * fails silently, and somebody setting the phone up deserves to be told which
+ * one rather than discovering it at eight in the morning.
+ */
+@Composable
+private fun ReadyScreen(onShowMedicine: () -> Unit) {
+    val context = LocalContext.current
+    var checks by remember { mutableStateOf(setupChecks(context)) }
+    var testNote by remember { mutableStateOf<String?>(null) }
+
+    // Re-read on every return from a settings screen, so a switch that was
+    // just flipped shows as fixed without restarting the app.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) checks = setupChecks(context)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("CareBridge is set up", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+
+        Button(
+            onClick = onShowMedicine,
+            modifier = Modifier.fillMaxWidth().height(72.dp).padding(top = 20.dp),
+        ) {
+            Text("Show my medicine", fontSize = 22.sp)
         }
 
-        setContent { PairingScreen() }
+        Text(
+            "For the family",
+            fontSize = 15.sp,
+            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
+        )
+
+        checks.forEach { check ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+            ) {
+                Text(
+                    (if (check.ok) "✓  " else "✕  ") + check.title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(check.why, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
+
+                if (!check.ok && check.fix != null) {
+                    TextButton(onClick = {
+                        runCatching { context.startActivity(check.fix) }
+                    }) { Text("Turn this on", fontSize = 17.sp) }
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = {
+                testNote = "Lock the phone now. It will ring in 10 seconds."
+                showTestReminder(context)
+            },
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(top = 16.dp),
+        ) {
+            Text("Test the locked screen", fontSize = 19.sp)
+        }
+
+        testNote?.let {
+            Text(it, fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
+        }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -179,10 +281,21 @@ private fun PairingScreen() {
 
                             paired.onSuccess { reply ->
                                 Pairing.save(context, reply.elderId)
-                                status = if (reply.deviceRegistered) {
-                                    "Ready. This is ${reply.elderName}'s phone."
-                                } else {
-                                    "Paired, but this phone cannot be reminded yet."
+
+                                // The phone must also sign in AS the elder, or
+                                // it can be pushed to and then cannot read the
+                                // reminder it was pushed about.
+                                val signedIn = reply.customToken?.let {
+                                    withContext(Dispatchers.IO) { ApiClient.signIn(it) }
+                                } ?: false
+
+                                status = when {
+                                    !signedIn ->
+                                        "Paired, but this phone could not sign in. Ask for a new code."
+                                    !reply.deviceRegistered ->
+                                        "Signed in, but this phone cannot be reminded yet."
+                                    else ->
+                                        "Ready. This is ${reply.elderName}'s phone."
                                 }
                             }
                             paired.onFailure {

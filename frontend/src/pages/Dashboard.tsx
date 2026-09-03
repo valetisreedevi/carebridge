@@ -75,6 +75,12 @@ const FOOD_LABEL: Record<string, string> = {
 /** No reminder physically went anywhere, whatever the attempt count says. */
 function wentNowhere(item: DayItem): boolean {
   return (
+    // A dose nobody has tried to deliver yet has not gone nowhere — it has
+    // not gone anywhere at all, which is a different sentence. The API sends
+    // reached_a_phone as a plain boolean, so "never attempted" and "attempted
+    // and reached nothing" arrive here looking identical, and a dose due in
+    // twenty minutes was being announced as a household with no phone set up.
+    item.attempt > 0 &&
     item.reached_a_phone === false &&
     item.status !== "UPCOMING" &&
     item.status !== "TAKEN" &&

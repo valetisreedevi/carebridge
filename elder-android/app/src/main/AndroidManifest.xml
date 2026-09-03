@@ -17,6 +17,12 @@
          sleeping elder is the morning. Asked for once, during setup. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Oppo/OnePlus (ColorOS) and several other skins refuse to let an app
+         raise a screen from the background unless it also holds this. Stock
+         Android does not need it for a full-screen intent; those phones do,
+         and they are silent about refusing. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Without this, package visibility on targetSdk 35 makes
          SpeechRecognizer.isRecognitionAvailable() return false and the
          microphone button silently disappears. -->

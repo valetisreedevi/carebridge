@@ -1,6 +1,9 @@
 package com.carebridge.elder.data
 
+import android.util.Log
 import com.carebridge.elder.BuildConfig
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.auth.FirebaseAuth
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -12,6 +15,9 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import java.util.concurrent.TimeUnit
+
+private const val TAG = "CareBridge"
 
 /**
  * Every field the elder does not strictly need is nullable with a default.
@@ -133,11 +139,61 @@ object ApiClient {
     @Volatile
     var elderId: String? = null
 
+    /**
+     * Signs in as the elder with the token pairing handed back.
+     *
+     * Called once at pairing. Firebase keeps the session on the device from
+     * then on and refreshes it itself, so the custom token — which is only
+     * valid for an hour — never needs storing.
+     */
+    suspend fun signIn(customToken: String): Boolean = runCatching {
+        Tasks.await(
+            FirebaseAuth.getInstance().signInWithCustomToken(customToken),
+            30,
+            TimeUnit.SECONDS,
+        )
+        true
+    }.getOrElse {
+        Log.w(TAG, "sign_in_failed ${it.message}")
+        false
+    }
+
+    fun isSignedIn(): Boolean = FirebaseAuth.getInstance().currentUser != null
+
+    /**
+     * Every request carries the elder's Firebase ID token.
+     *
+     * Blocking on the token is correct here: OkHttp interceptors already run
+     * off the main thread, and a request sent without it comes back 401,
+     * which the elder only ever sees as "cannot reach CareBridge".
+     *
+     * `X-Elder-Id` used to stand in for this. The deployed API ignores that
+     * header completely, so it was never authenticating anything.
+     */
+    private fun idToken(forceRefresh: Boolean): String? {
+        val user = FirebaseAuth.getInstance().currentUser ?: return null
+        return runCatching {
+            Tasks.await(user.getIdToken(forceRefresh), 20, TimeUnit.SECONDS).token
+        }.getOrNull()
+    }
+
     private val identity = Interceptor { chain ->
-        val request = chain.request().newBuilder()
-            .apply { elderId?.let { addHeader("X-Elder-Id", it) } }
-            .build()
-        chain.proceed(request)
+        fun send(token: String?) = chain.proceed(
+            chain.request().newBuilder()
+                .apply { token?.let { addHeader("Authorization", "Bearer $it") } }
+                .build()
+        )
+
+        val response = send(idToken(forceRefresh = false))
+
+        // A cached token that the server has expired or revoked. Worth one
+        // forced refresh before giving up, because the alternative is a
+        // reminder the elder cannot answer.
+        if (response.code != 401) return@Interceptor response
+
+        Log.i(TAG, "token_rejected retrying with a fresh one")
+        response.close()
+        send(idToken(forceRefresh = true))
     }
 
     private val moshi = Moshi.Builder()
@@ -157,4 +213,24 @@ object ApiClient {
     fun absolute(url: String): String =
         if (url.startsWith("http")) url
         else BuildConfig.API_BASE_URL.trimEnd('/') + url
+
+    /**
+     * Headers for fetching a photo or a recording.
+     *
+     * A signed storage URL needs none. The relative fallback is served by our
+     * own API and needs the elder's token — and the image loader and the media
+     * player each use their own HTTP stack, so neither passes through the
+     * interceptor above. That is exactly how the photo and the voice went
+     * missing while every other call worked.
+     */
+    fun mediaHeaders(url: String): Map<String, String> =
+        if (url.startsWith("http")) emptyMap()
+        else idToken(forceRefresh = false)
+            ?.let { mapOf("Authorization" to "Bearer $it") }
+            ?: emptyMap()
+
+    /** An image loader that authenticates the same way the API client does. */
+    val imageLoaderClient: OkHttpClient by lazy {
+        OkHttpClient.Builder().addInterceptor(identity).build()
+    }
 }

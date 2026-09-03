@@ -58,9 +58,14 @@ object Copy {
         if (language == TELUGU) Locale("te", "IN") else Locale("en", "IN")
 
     /**
-     * Recognition is patchier than synthesis, and a failed recognition is a
-     * dead end for the elder whereas the buttons always work. English is the
-     * more reliable ask even for a Telugu speaker saying a word or two.
+     * Listen in the language she actually speaks.
+     *
+     * Asking for en-IN while a Telugu speaker answers does not degrade to
+     * something usable — it returns confident English nonsense, which reaches
+     * the agent as a reply nobody can act on and counts against her as an
+     * unclear answer. The backend has always been ready for Telugu
+     * (`speak_language` in the agent prompt); only the phone was not.
      */
-    fun recognizerTag(language: String?): String = "en-IN"
+    fun recognizerTag(language: String?): String =
+        if (language == TELUGU) "te-IN" else "en-IN"
 }

@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
@@ -198,7 +199,13 @@ class ReminderActivity : ComponentActivity() {
 
             player = MediaPlayer().apply {
                 setAudioAttributes(alarmAudio)
-                setDataSource(url)
+                // Headers matter for the API-served fallback: without them it
+                // is a 401 and the family's voice never plays.
+                setDataSource(
+                    this@ReminderActivity,
+                    Uri.parse(url),
+                    ApiClient.mediaHeaders(url),
+                )
                 setOnPreparedListener {
                     Log.i(TAG, "audio_started ms=${it.duration} vol=$volume/$max")
                     it.start()
@@ -258,6 +265,22 @@ class ReminderActivity : ComponentActivity() {
                         RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
                     )
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Copy.recognizerTag(language))
+                    putExtra(
+                        RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
+                        Copy.recognizerTag(language),
+                    )
+
+                    // An elder does not answer at conversational speed. The
+                    // default cuts her off after about two seconds of silence,
+                    // which turns a slow, correct answer into a failed one.
+                    putExtra(
+                        RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                        4000L,
+                    )
+                    putExtra(
+                        RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                        3000L,
+                    )
                 }
             )
         }

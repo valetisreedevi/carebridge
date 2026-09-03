@@ -66,6 +66,10 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+    // The elder signs in as themselves with the custom token that pairing
+    // returns. Without it every read is a 401 and the screen can only say it
+    // cannot reach CareBridge.
+    implementation("com.google.firebase:firebase-auth-ktx")
 
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
