@@ -16,6 +16,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
 import com.carebridge.elder.notify.REMINDER_NOTIFICATION_ID
+import com.carebridge.elder.ui.theme.CareBridgeTheme
 import java.util.Locale
 
 /**
@@ -108,72 +110,78 @@ class ReminderActivity : ComponentActivity() {
 
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
 
+        // Wrapping both activities in the theme is what kills the stock
+        // Material purple structurally rather than one control at a time.
+        enableEdgeToEdge()
+
         setContent {
-            val state by model.state.collectAsStateWithLifecycle()
-            var listening by remember { mutableStateOf(false) }
+            CareBridgeTheme {
+                val state by model.state.collectAsStateWithLifecycle()
+                var listening by remember { mutableStateOf(false) }
 
-            LaunchedEffect(eventId) { model.load(eventId) }
+                LaunchedEffect(eventId) { model.load(eventId) }
 
-            // The caregiver's own recording plays once per reminder. If there
-            // is no recording, or it will not play, the phone still says out
-            // loud what is due — silence is the one outcome we cannot ship.
-            // Keyed on the ROUND, not the current dose. Keying on the dose
-            // meant the recording restarted every time she answered one, so
-            // three tablets played the family's voice three times over.
-            LaunchedEffect(state.queue.firstOrNull()?.eventId) {
-                val reminder = state.queue.firstOrNull() ?: return@LaunchedEffect
-                if (playedFor == reminder.eventId) return@LaunchedEffect
-                playedFor = reminder.eventId
+                // The caregiver's own recording plays once per reminder. If there
+                // is no recording, or it will not play, the phone still says out
+                // loud what is due — silence is the one outcome we cannot ship.
+                // Keyed on the ROUND, not the current dose. Keying on the dose
+                // meant the recording restarted every time she answered one, so
+                // three tablets played the family's voice three times over.
+                LaunchedEffect(state.queue.firstOrNull()?.eventId) {
+                    val reminder = state.queue.firstOrNull() ?: return@LaunchedEffect
+                    if (playedFor == reminder.eventId) return@LaunchedEffect
+                    playedFor = reminder.eventId
 
-                language = reminder.language
+                    language = reminder.language
 
-                val spoken = Copy.spokenPrompt(
-                    reminder.language,
-                    reminder.medicationName ?: "medicine",
+                    val spoken = Copy.spokenPrompt(
+                        reminder.language,
+                        reminder.medicationName ?: "medicine",
+                    )
+                    val url = reminder.caregiverAudioUrl
+
+                    if (url == null) speak(spoken)
+                    else playCaregiverVoice(ApiClient.absolute(url), spoken)
+                }
+
+                ReminderScreen(
+                    state = state,
+                    listening = listening,
+                    speechAvailable = SpeechRecognizer.isRecognitionAvailable(this),
+                    onMic = {
+                        if (listening) {
+                            recognizer?.stopListening()
+                            listening = false
+                        } else {
+                            listening = true
+                            listen(
+                                onHeard = { heard ->
+                                    listening = false
+                                    model.say(heard) { reply -> speak(reply) }
+                                },
+                                onFailed = {
+                                    listening = false
+                                    model.notice("I did not catch that.")
+                                },
+                            )
+                        }
+                    },
+                    onTaken = model::markTaken,
+                    onSnooze = { model.snooze() },
+                    onRetry = model::retry,
+                    playing = playing,
+                    onPlayAgain = ::replayVoice,
                 )
-                val url = reminder.caregiverAudioUrl
 
-                if (url == null) speak(spoken)
-                else playCaregiverVoice(ApiClient.absolute(url), spoken)
+                LaunchedEffect(state.finished) {
+                    state.finished?.let { speak(it) }
+                }
+
+                // Every answer buys another three minutes: a round of three
+                // tablets must not be timed out because the first two took a
+                // while.
+                LaunchedEffect(state.index) { armGiveUp() }
             }
-
-            ReminderScreen(
-                state = state,
-                listening = listening,
-                speechAvailable = SpeechRecognizer.isRecognitionAvailable(this),
-                onMic = {
-                    if (listening) {
-                        recognizer?.stopListening()
-                        listening = false
-                    } else {
-                        listening = true
-                        listen(
-                            onHeard = { heard ->
-                                listening = false
-                                model.say(heard) { reply -> speak(reply) }
-                            },
-                            onFailed = {
-                                listening = false
-                                model.notice("I did not catch that.")
-                            },
-                        )
-                    }
-                },
-                onTaken = model::markTaken,
-                onSnooze = { model.snooze() },
-                onRetry = model::retry,
-                playing = playing,
-                onPlayAgain = ::replayVoice,
-            )
-
-            LaunchedEffect(state.finished) {
-                state.finished?.let { speak(it) }
-            }
-
-            // Every answer buys another three minutes: a round of three
-            // tablets must not be timed out because the first two took a
-            // while.
-            LaunchedEffect(state.index) { armGiveUp() }
         }
     }
 

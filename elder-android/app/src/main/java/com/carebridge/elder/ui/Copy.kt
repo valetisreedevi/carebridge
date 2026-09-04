@@ -61,6 +61,16 @@ object Copy {
     fun nothingDue(language: String?) =
         if (language == TELUGU) "ప్రస్తుతం మందు ఏదీ లేదు" else "Nothing to take right now"
 
+    /**
+     * The line under "nothing to take". It was hardcoded English on the
+     * handset while every other word on the screen was translated, so a Telugu
+     * speaker met one sentence she could not read on the one screen that is
+     * meant to need no reading. Wording matches i18n.ts `willLetYouKnow`.
+     */
+    fun nothingDueHint(language: String?) =
+        if (language == TELUGU) "సమయం అయినప్పుడు CareBridge మీకు తెలియజేస్తుంది."
+        else "CareBridge will let you know when it is time."
+
     /** Spoken when there is no recording, or the recording will not play. */
     fun spokenPrompt(language: String?, medicine: String) =
         if (language == TELUGU) "$medicine వేసుకోండి"

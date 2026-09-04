@@ -1,6 +1,7 @@
 package com.carebridge.elder.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -32,17 +33,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.carebridge.elder.data.ApiClient
+import com.carebridge.elder.ui.theme.Brand
+import com.carebridge.elder.ui.theme.BrandSoft
+import com.carebridge.elder.ui.theme.Card
+import com.carebridge.elder.ui.theme.Ink
+import com.carebridge.elder.ui.theme.Line
+import com.carebridge.elder.ui.theme.LineStrong
+import com.carebridge.elder.ui.theme.Muted
+import com.carebridge.elder.ui.theme.Paper
+import com.carebridge.elder.ui.theme.Warn
 
-// A warm palette rather than a clinical one. This screen appears beside
-// someone's bed at ten at night; it should not look like a hospital form.
-private val Paper = Color(0xFFFBF8F3)
-private val Card = Color(0xFFFFFFFF)
-private val Ink = Color(0xFF17212B)
-private val Muted = Color(0xFF6B7A88)
-private val Green = Color(0xFF1B7A4B)
-private val GreenWash = Color(0xFFE8F3EC)
-private val Line = Color(0xFFE7E0D6)
-private val Amber = Color(0xFF9A5B14)
+// Colour lives in ui/theme/Color.kt, shared with the theme so this screen and
+// every Material control the app has not hand-coloured agree. It used to be a
+// private block here, which is how the app came to hold three different greens.
 
 /**
  * What the elder sees when a dose is due.
@@ -69,7 +72,7 @@ fun ReminderScreen(
         Box(
             modifier = Modifier.fillMaxSize().background(Paper),
             contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator(color = Green) }
+        ) { CircularProgressIndicator(color = Brand) }
         return
     }
 
@@ -80,7 +83,8 @@ fun ReminderScreen(
     // her exactly like a quiet evening — and the dose went unanswered.
     if (state.failed) {
         Column(
-            modifier = Modifier.fillMaxSize().background(Paper).padding(36.dp),
+            modifier = Modifier.fillMaxSize().background(Paper)
+                .safeDrawingPadding().padding(36.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -103,7 +107,7 @@ fun ReminderScreen(
                 onClick = onRetry,
                 modifier = Modifier.fillMaxWidth().height(76.dp),
                 shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Green),
+                colors = ButtonDefaults.buttonColors(containerColor = Brand),
             ) {
                 Text(
                     Copy.tryAgain(language),
@@ -118,7 +122,8 @@ fun ReminderScreen(
 
     if (reminder == null) {
         Column(
-            modifier = Modifier.fillMaxSize().background(Paper).padding(36.dp),
+            modifier = Modifier.fillMaxSize().background(Paper)
+                .safeDrawingPadding().padding(36.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -131,7 +136,7 @@ fun ReminderScreen(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                state.notice ?: "CareBridge will let you know when it is time.",
+                state.notice ?: Copy.nothingDueHint(language),
                 fontSize = 21.sp,
                 color = Muted,
                 textAlign = TextAlign.Center,
@@ -144,6 +149,11 @@ fun ReminderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Paper)
+            // The paper runs under the status and navigation bars; only the
+            // words are inset. targetSdk 35 lays every activity out edge to
+            // edge with no way to opt out, and this screen had a fixed 32.dp
+            // top padding written when the system reserved that space itself.
+            .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -152,7 +162,7 @@ fun ReminderScreen(
             Copy.medicineTime(language).uppercase(),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
-            color = Green,
+            color = Brand,
         )
 
         // Without this she takes the first tablet, sees the screen change, and
@@ -213,14 +223,14 @@ fun ReminderScreen(
             Text(
                 turn.text,
                 fontSize = 21.sp,
-                color = if (turn.fromElder) Ink else Green,
+                color = if (turn.fromElder) Ink else Brand,
                 textAlign = TextAlign.Center,
             )
         }
 
         state.notice?.let {
             Spacer(Modifier.height(18.dp))
-            Text(it, fontSize = 20.sp, color = Amber, textAlign = TextAlign.Center)
+            Text(it, fontSize = 20.sp, color = Warn, textAlign = TextAlign.Center)
         }
 
         // Only when there is a recording to hear. A dose with no voice should
@@ -232,7 +242,7 @@ fun ReminderScreen(
                     if (playing) Copy.nowPlaying(language) else Copy.playAgain(language),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (playing) Muted else Green,
+                    color = if (playing) Muted else Brand,
                 )
             }
         }
@@ -245,23 +255,33 @@ fun ReminderScreen(
             onClick = onTaken,
             enabled = !state.busy,
             shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Green),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand),
             modifier = Modifier.fillMaxWidth().height(96.dp),
         ) {
             Text(
                 Copy.tookIt(language),
                 fontSize = 30.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = Paper,
             )
         }
 
         Spacer(Modifier.height(14.dp))
 
+        // Material's default outline and label are the stock purple, which
+        // is the one colour on this screen that belongs to no product. Set at
+        // the call site rather than by a theme so the fix cannot be undone by
+        // a later theming change, and so the disabled state stays legible
+        // instead of fading to an unreadable tint of it.
         OutlinedButton(
             onClick = onSnooze,
             enabled = !state.busy,
             shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(2.dp, LineStrong),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Ink,
+                disabledContentColor = Muted,
+            ),
             modifier = Modifier.fillMaxWidth().height(78.dp),
         ) {
             Text(Copy.remindLater(language), fontSize = 24.sp, color = Ink)
@@ -274,7 +294,7 @@ fun ReminderScreen(
                     if (listening) Copy.listening(language)
                     else Copy.speakToCareBridge(language),
                     fontSize = 20.sp,
-                    color = if (listening) Green else Muted,
+                    color = if (listening) Brand else Muted,
                 )
             }
         }
@@ -309,14 +329,14 @@ private fun MedicinePicture(url: String?, fallbackLetter: String?) {
     }
 
     Box(
-        modifier = frame.background(GreenWash),
+        modifier = frame.background(BrandSoft),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             fallbackLetter ?: "?",
             fontSize = 88.sp,
             fontWeight = FontWeight.Bold,
-            color = Green,
+            color = Brand,
         )
     }
 }
@@ -327,9 +347,9 @@ private fun Chip(text: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(GreenWash)
+            .background(BrandSoft)
             .padding(horizontal = 22.dp, vertical = 10.dp),
     ) {
-        Text(text, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, color = Green)
+        Text(text, fontSize = 27.sp, fontWeight = FontWeight.SemiBold, color = Brand)
     }
 }

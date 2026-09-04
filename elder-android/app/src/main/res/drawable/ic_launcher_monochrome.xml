@@ -1,21 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The CareBridge mark: two figures, and an arm reaching across to rest on a
-     shoulder. Identical geometry to frontend/public/favicon.svg — same circles,
-     same three strokes, same numbers — so the tab, the nav, the sign-in card
-     and this launcher icon are one mark rather than four drawings of one idea.
+<!-- The themed-icon layer, required from Android 13. Without a <monochrome>
+     entry the system does not fall back to the coloured icon — it draws the app
+     as a featureless blob in the wallpaper's accent colour, which on a phone
+     with themed icons switched on is what the family would have been tapping.
 
-     It replaces a generic medicine cross, which said "pills" where the product
-     means "somebody is with you", and which was also the second symbol in a
-     product that already had a better one.
-
-     PLACEMENT IS ARITHMETIC, NOT TASTE. The art is authored on the web's 64x64
-     canvas and mapped into the 108x108 adaptive canvas by the group transform
-     below: a point p becomes 1.08*p + (20.52, 19.98). The art's bounding box on
-     the 64 canvas is x[7,55] y[11,52], centre (31, 31.5), and the farthest any
-     inked pixel sits from that centre is 30.34 — the round cap at the foot of
-     either body. 1.08 * 30.34 = 32.8, inside the 33 radius that Android
-     guarantees every launcher mask will show. Raising the scale past 1.087
-     starts shaving those two feet on a circular mask. -->
+     Same geometry as ic_launcher_foreground.xml. The colour here is discarded;
+     Android keeps only the alpha and tints it to the wallpaper. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -30,10 +20,10 @@
 
         <!-- The elder: head, and shoulders opening to the left. -->
         <path
-            android:fillColor="#FAF7F2"
+            android:fillColor="#FFFFFF"
             android:pathData="M11,19 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z" />
         <path
-            android:strokeColor="#FAF7F2"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="6"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
@@ -41,17 +31,17 @@
 
         <!-- The reach. This one stroke is the bridge the product is named for. -->
         <path
-            android:strokeColor="#FAF7F2"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="5.5"
             android:strokeLineCap="round"
             android:pathData="M19,31 c9,0 17,3 22,8" />
 
         <!-- The family member, smaller and set back. -->
         <path
-            android:fillColor="#FAF7F2"
+            android:fillColor="#FFFFFF"
             android:pathData="M37.5,26 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0 Z" />
         <path
-            android:strokeColor="#FAF7F2"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="6"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

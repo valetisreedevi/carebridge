@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The web client's tokens, to the digit (frontend/src/index.css :root).
+     There were three CareBridge greens before this: #12695A on the launcher,
+     #1B7A4B in the app, #0F6B5C on the web. There is one now. -->
 <resources>
-    <color name="ic_launcher_background">#12695A</color>
+    <color name="carebridge_brand">#0F6B5C</color>
+    <color name="carebridge_paper">#FAF7F2</color>
+    <color name="ic_launcher_background">#0F6B5C</color>
 </resources>

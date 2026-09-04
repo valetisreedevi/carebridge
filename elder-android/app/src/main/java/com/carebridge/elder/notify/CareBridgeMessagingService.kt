@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.carebridge.elder.R
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
@@ -153,7 +154,8 @@ fun showPlainNotice(context: Context, title: String, body: String) {
     ensureReminderChannel(context)
 
     val notification = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setColor(ContextCompat.getColor(context, R.color.carebridge_brand))
         .setContentTitle(title)
         .setContentText(body)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -217,7 +219,8 @@ fun showReminder(
     )
 
     val notification = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setColor(ContextCompat.getColor(context, R.color.carebridge_brand))
         // The server sends the words, already in the elder's own language.
         // The notification is posted before anything can be fetched, so text
         // decided here could only ever be hardcoded English.

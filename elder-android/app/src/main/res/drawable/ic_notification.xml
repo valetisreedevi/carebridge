@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The status-bar icon. It was android.R.drawable.ic_dialog_info: a stock
+     grey "i" in a circle, the system's own asset, which in the shade sat
+     indistinguishable from any other app's notice — for the one notification
+     in this product that must be recognised in a glance from across a room.
+
+     Android discards every colour here and keeps only the alpha, so this is
+     drawn in flat white. Same geometry as the launcher mark, mapped into the
+     24dp canvas: p becomes 0.46*p + (-2.26, -2.49), which fits the art's
+     48x41 bounding box inside the centre 22dp with a pixel to spare. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <group
+        android:scaleX="0.46"
+        android:scaleY="0.46"
+        android:translateX="-2.26"
+        android:translateY="-2.49">
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M11,19 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M10,49 V37 a9.5,9.5 0 0 1 9.5,-9.5" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:pathData="M19,31 c9,0 17,3 22,8" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M37.5,26 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0 Z" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M36,49 v-7 a8,8 0 0 1 16,0 v7" />
+    </group>
+</vector>

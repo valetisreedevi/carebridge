@@ -12,6 +12,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -51,6 +53,7 @@ import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
 import com.carebridge.elder.data.RedeemBody
 import com.carebridge.elder.notify.ensureReminderChannel
+import com.carebridge.elder.ui.theme.CareBridgeTheme
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,12 +76,19 @@ class MainActivity : ComponentActivity() {
         // that phone back to setup instead of on to a screen that cannot work.
         val ready = paired != null && ApiClient.isSignedIn()
 
+        // targetSdk 35 draws edge to edge regardless; this is the call that
+        // makes the system bars transparent and their icons dark, so they sit
+        // on the app's own paper instead of a black strip above it.
+        enableEdgeToEdge()
+
         setContent {
-            if (ready) ReadyScreen(
-                onShowMedicine = {
-                    startActivity(Intent(this, ReminderActivity::class.java))
-                },
-            ) else PairingScreen()
+            CareBridgeTheme {
+                if (ready) ReadyScreen(
+                    onShowMedicine = {
+                        startActivity(Intent(this, ReminderActivity::class.java))
+                    },
+                ) else PairingScreen()
+            }
         }
     }
 }
@@ -111,6 +121,7 @@ private fun ReadyScreen(onShowMedicine: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -235,7 +246,7 @@ private fun PairingScreen() {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(28.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

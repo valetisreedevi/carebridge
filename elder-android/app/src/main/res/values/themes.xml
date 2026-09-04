@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CareBridge" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- What the window looks like before Compose has drawn anything.
+         Material Light's own #FAFAFA flashed a cool white for the moment
+         between the screen turning itself on and the first frame — on a phone
+         that wakes from black beside a bed at eight in the morning, that flash
+         is the first thing the elder sees.
+
+         The bars are transparent because targetSdk 35 lays the app out under
+         them whether or not it asks to; the alternative is not "no edge to
+         edge" but "edge to edge with a black strip". windowLightStatusBar puts
+         dark icons up there, which is the only way they are visible on paper —
+         the clock and the battery were black-on-black before this. -->
+    <style name="Theme.CareBridge" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/carebridge_paper</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>
