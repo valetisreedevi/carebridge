@@ -245,10 +245,10 @@ export default function Landing() {
           </h1>
           <p className="land__lede">
             CareBridge is two halves of one thing. You set up the medicines and
-            record a reminder in <em>your</em> own voice. They get a phone that
-            wakes itself at the right time and plays it — nothing to open,
-            nothing to read. Then you see what actually happened, so you never
-            have to ring and ask.
+            record a reminder in <em>your</em> own voice. The person you look
+            after gets a phone that wakes itself at the right time and plays it
+            — nothing to open, nothing to read, no app to learn. Then you see
+            what actually happened, so you never have to ring and ask.
           </p>
           <div className="land__cta">
             <Link className="btn-primary" to="/signin">
@@ -266,11 +266,11 @@ export default function Landing() {
       <section className="land__story">
         <Reveal as="p">
           A missed dose is almost never stubbornness. You have a shift to get
-          to, a meeting that runs on, a child to collect. They have four tablets
-          a day, a strip that looks like every other strip, and nobody in the
-          room to say which one is next. The only way to find out is to ring and
-          ask — and be told yes, because they would rather not have you
-          worrying.
+          to, a meeting that runs on, a child to collect. The person at home has
+          four tablets a day and a strip that looks like every other strip, and
+          nobody in the room to say which one is next. The only way to find out
+          is to ring and ask, and be told yes, because they would rather not
+          have you worrying.
         </Reveal>
         <Reveal as="p" className="land__strike" delay={140}>
           CareBridge asks for you, at the moment it matters, in a voice they
@@ -293,8 +293,9 @@ export default function Landing() {
             <span className="land__num">2</span>
             <h3>Their phone does the rest</h3>
             <p>
-              Even locked, even face-down. It plays the message you recorded, in
-              their own language, beside a photograph of the tablet.
+              Even locked, even face-down, their phone plays the message you
+              recorded — in their own language, beside a photograph of the
+              tablet.
             </p>
           </Reveal>
           <Reveal as="li" delay={220}>
@@ -313,7 +314,7 @@ export default function Landing() {
           Both are built from the app's own class names — .elder__* and
           .schedule__row and .ledger are the same rules the live product uses. */}
       <section className="show">
-        <p className="land__eyebrow">Their side. Your side.</p>
+        <p className="land__eyebrow">The two people this is for</p>
         <Reveal as="h2">Their phone. Your dashboard.</Reveal>
 
         <div className="show__pair">
@@ -321,7 +322,7 @@ export default function Landing() {
             <div className="show__phone">
               <div className="show__elder">
                 <p className="elder__title">Medicine time</p>
-                <div className="show__photo" aria-hidden="true" />
+                <div className="show__photo pill pill--teal" aria-hidden="true" />
                 <p className="elder__medicine">Amlodipine</p>
                 <p className="elder__dose">1 tablet</p>
                 <p className="elder__food">after food</p>
@@ -381,6 +382,7 @@ export default function Landing() {
               <ul className="schedule show__rows">
                 <li className="schedule__row schedule__row--good">
                   <span className="schedule__time">8:00 AM</span>
+                  <span className="schedule__photo pill pill--teal" />
                   <span className="schedule__what">
                     <strong>Amlodipine</strong>
                     <span className="course">Day 4 of 15 · ends 18 Sep</span>
@@ -389,6 +391,7 @@ export default function Landing() {
                 </li>
                 <li className="schedule__row schedule__row--bad">
                   <span className="schedule__time">8:00 PM</span>
+                  <span className="schedule__photo pill pill--amber" />
                   <span className="schedule__what">
                     <strong>Fever Tablet</strong>
                     <small>1 tablet · after food</small>
@@ -397,6 +400,7 @@ export default function Landing() {
                 </li>
                 <li className="schedule__row schedule__row--waiting">
                   <span className="schedule__time">9:00 PM</span>
+                  <span className="schedule__photo pill pill--slate" />
                   <span className="schedule__what">
                     <strong>Metformin</strong>
                     <small>1 tablet</small>
