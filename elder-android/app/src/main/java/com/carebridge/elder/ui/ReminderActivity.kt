@@ -14,16 +14,18 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.viewModels
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
+import com.carebridge.elder.notify.REMINDER_NOTIFICATION_ID
 import java.util.Locale
 
 /**
@@ -35,6 +37,9 @@ class ReminderActivity : ComponentActivity() {
     companion object {
         const val EXTRA_EVENT_ID = "event_id"
         const val TAG = "CareBridge"
+
+        /** Long enough to walk to the kitchen; short enough to not sit lit. */
+        private const val GIVE_UP_AFTER_MS = 3 * 60 * 1000L
     }
 
     private var tts: TextToSpeech? = null
@@ -42,12 +47,24 @@ class ReminderActivity : ComponentActivity() {
     private var recognizer: SpeechRecognizer? = null
     private var playedFor: String? = null
     private var focusRequest: AudioFocusRequest? = null
+    private val model: ReminderViewModel by viewModels()
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var giveUp: Runnable? = null
 
     /** The elder's language, as the server reports it — not the handset's. */
     private var language: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // First thing, before any logging or work that could delay it. The
+        // channel's tone belongs to the system and cannot be stopped any other
+        // way, and until this runs it is playing over the family's recording.
+        // If this activity never starts — overlay refused, full-screen intent
+        // withheld — this never runs and the notification keeps ringing, which
+        // is exactly the behaviour that case needs.
+        dismissNotification()
+        armGiveUp()
 
         // Proof, in the log, that the phone really was asleep and locked when
         // this took over — not that someone was watching an unlocked screen.
@@ -77,7 +94,6 @@ class ReminderActivity : ComponentActivity() {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
 
         setContent {
-            val model: ReminderViewModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
             var listening by remember { mutableStateOf(false) }
 
@@ -86,8 +102,11 @@ class ReminderActivity : ComponentActivity() {
             // The caregiver's own recording plays once per reminder. If there
             // is no recording, or it will not play, the phone still says out
             // loud what is due — silence is the one outcome we cannot ship.
-            LaunchedEffect(state.reminder?.eventId) {
-                val reminder = state.reminder ?: return@LaunchedEffect
+            // Keyed on the ROUND, not the current dose. Keying on the dose
+            // meant the recording restarted every time she answered one, so
+            // three tablets played the family's voice three times over.
+            LaunchedEffect(state.queue.firstOrNull()?.eventId) {
+                val reminder = state.queue.firstOrNull() ?: return@LaunchedEffect
                 if (playedFor == reminder.eventId) return@LaunchedEffect
                 playedFor = reminder.eventId
 
@@ -132,13 +151,71 @@ class ReminderActivity : ComponentActivity() {
             LaunchedEffect(state.finished) {
                 state.finished?.let { speak(it) }
             }
+
+            // Every answer buys another three minutes: a round of three
+            // tablets must not be timed out because the first two took a
+            // while.
+            LaunchedEffect(state.index) { armGiveUp() }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        recreate()
+        dismissNotification()
+
+        // Was recreate(), which tore the screen down and rebuilt it — so when
+        // three medicines arrived at once the last push won and the first two
+        // were never seen. The queue already holds every open dose, so a
+        // refetch is all a new arrival needs.
+        model.load(null)
+    }
+
+    /**
+     * Stands down after three minutes of no answer.
+     *
+     * Writes NOTHING to the server — no taken, no snooze, no decline. The
+     * backend's own ladder already owns that outcome: the dose stays open, the
+     * next reminder fires on schedule, and the family is told if it is never
+     * answered. An auto-snooze here would inflate the snooze count the
+     * escalation logic reads, so silence would quietly stop reading as silence.
+     *
+     * The practical half matters too: FLAG_KEEP_SCREEN_ON otherwise leaves the
+     * phone lit until the battery goes, and never returns it to the lock screen
+     * for the next reminder to raise.
+     */
+    private fun armGiveUp() {
+        giveUp?.let { handler.removeCallbacks(it) }
+        val task = Runnable {
+            Log.i(TAG, "unanswered_standing_down")
+            stopVoice()
+            releaseAudioFocus()
+            dismissNotification()
+            finish()
+        }
+        giveUp = task
+        handler.postDelayed(task, GIVE_UP_AFTER_MS)
+    }
+
+    private fun dismissNotification() {
+        runCatching {
+            NotificationManagerCompat.from(this).cancel(REMINDER_NOTIFICATION_ID)
+        }
+    }
+
+    /**
+     * Stops the recording, without giving up audio focus.
+     *
+     * Focus is deliberately kept: every caller is about to speak, and handing
+     * it back only to take it again lets whatever else is playing surface in
+     * the gap.
+     */
+    private fun stopVoice() {
+        player?.let { existing ->
+            runCatching { if (existing.isPlaying) existing.stop() }
+            existing.release()
+        }
+        player = null
     }
 
     /**
@@ -233,6 +310,12 @@ class ReminderActivity : ComponentActivity() {
     private fun speak(text: String) {
         if (text.isBlank()) return
 
+        // Both paths that reach here — the confirmation after "I took it" and
+        // the agent's spoken reply — used to start on top of a recording that
+        // was still playing, so the family's voice and the robot's talked over
+        // each other.
+        stopVoice()
+
         // Set per utterance: the elder's language is not known until the
         // reminder has been fetched, which is after TextToSpeech is built.
         tts?.language = Copy.ttsLocale(language)
@@ -287,6 +370,7 @@ class ReminderActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        giveUp?.let { handler.removeCallbacks(it) }
         releaseAudioFocus()
         player?.release()
         recognizer?.destroy()

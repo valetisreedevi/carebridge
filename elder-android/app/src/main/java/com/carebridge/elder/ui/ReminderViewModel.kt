@@ -17,13 +17,27 @@ data class Turn(val fromElder: Boolean, val text: String)
 
 data class ReminderUiState(
     val loading: Boolean = true,
-    val reminder: Reminder? = null,
+    /** Every dose open right now, not just the first. */
+    val queue: List<Reminder> = emptyList(),
+    /** Which of them she is looking at. */
+    val index: Int = 0,
     val turns: List<Turn> = emptyList(),
     val busy: Boolean = false,
     val notice: String? = null,
-    /** Set once the reminder reaches a state the elder cannot act on again. */
+    /** Set once the LAST dose in the round is answered, not the first. */
     val finished: String? = null,
-)
+) {
+    /**
+     * Derived rather than stored, so there is no second copy to fall out of
+     * step with the queue — and so every existing `state.reminder` read in the
+     * screen keeps working untouched.
+     */
+    val reminder: Reminder? get() = queue.getOrNull(index)
+
+    /** "1 of 3", for a woman who would otherwise stop after the first tablet. */
+    val position: Int get() = index + 1
+    val total: Int get() = queue.size
+}
 
 class ReminderViewModel : ViewModel() {
 
@@ -34,15 +48,23 @@ class ReminderViewModel : ViewModel() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, notice = null) }
 
+            // Always fetch the whole round. A specific event id decides where
+            // in it she starts, not whether the rest exists.
             val result = runCatching {
-                if (eventId != null) ApiClient.api.event(eventId)
-                else ApiClient.api.activeReminder().reminder
+                val active = ApiClient.api.activeReminder()
+                if (active.reminders.isNotEmpty()) active.reminders
+                // An older API build sends only the singular field.
+                else listOfNotNull(active.reminder)
             }
 
             _state.update {
                 result.fold(
-                    onSuccess = { reminder ->
-                        it.copy(loading = false, reminder = reminder)
+                    onSuccess = { queue ->
+                        val start = eventId
+                            ?.let { wanted -> queue.indexOfFirst { r -> r.eventId == wanted } }
+                            ?.coerceAtLeast(0)
+                            ?: 0
+                        it.copy(loading = false, queue = queue, index = start)
                     },
                     onFailure = { _ ->
                         it.copy(
@@ -80,11 +102,24 @@ class ReminderViewModel : ViewModel() {
             runCatching { block(eventId) }.fold(
                 onSuccess = { spoken ->
                     _state.update {
-                        it.copy(
-                            busy = false,
-                            finished = spoken,
-                            turns = it.turns + Turn(false, spoken),
-                        )
+                        // Answering one dose moves to the next rather than
+                        // ending the screen. Only the last one finishes it —
+                        // which is the whole bug: she used to take one tablet,
+                        // be told she was done, and leave two unanswered.
+                        val next = it.index + 1
+                        if (next < it.queue.size) {
+                            it.copy(
+                                busy = false,
+                                index = next,
+                                turns = it.turns + Turn(false, spoken),
+                            )
+                        } else {
+                            it.copy(
+                                busy = false,
+                                finished = spoken,
+                                turns = it.turns + Turn(false, spoken),
+                            )
+                        }
                     }
                 },
                 onFailure = {

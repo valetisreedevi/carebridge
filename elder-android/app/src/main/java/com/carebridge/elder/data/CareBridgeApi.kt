@@ -45,7 +45,18 @@ data class Reminder(
 
 data class ActiveReminder(
     val active: Boolean = false,
+    /**
+     * The first open dose, kept for compatibility.
+     *
+     * The app reads [reminders] instead: an evening is rarely one tablet, and
+     * taking only this field is why an elder with three medicines due at once
+     * saw one, answered it, and had the other two escalate to her family
+     * unanswered — for doses she was never shown.
+     */
     val reminder: Reminder? = null,
+    /** Every dose open right now, oldest first. The server already sends it. */
+    val reminders: List<Reminder> = emptyList(),
+    val remaining: Int = 0,
 )
 
 data class SnoozeBody(val minutes: Int)
@@ -223,11 +234,27 @@ object ApiClient {
      * interceptor above. That is exactly how the photo and the voice went
      * missing while every other call worked.
      */
-    fun mediaHeaders(url: String): Map<String, String> =
-        if (url.startsWith("http")) emptyMap()
-        else idToken(forceRefresh = false)
+    fun mediaHeaders(url: String): Map<String, String> {
+        // Decided by ORIGIN, not by whether the string happens to start with
+        // "http". Callers resolve a URL with absolute() before handing it to a
+        // player, so by the time it arrived here every URL looked absolute and
+        // this returned nothing — the token was never attached, and the 401 it
+        // was written to prevent came back anyway.
+        val ours = !url.startsWith("http") || url.startsWith(apiOrigin)
+        if (!ours) return emptyMap()
+
+        return idToken(forceRefresh = false)
             ?.let { mapOf("Authorization" to "Bearer $it") }
             ?: emptyMap()
+    }
+
+    /** Scheme and host of our own API, for telling our URLs from storage's. */
+    private val apiOrigin: String by lazy {
+        runCatching {
+            val base = java.net.URI(BuildConfig.API_BASE_URL)
+            "${base.scheme}://${base.host}"
+        }.getOrDefault(BuildConfig.API_BASE_URL.trimEnd('/'))
+    }
 
     /** An image loader that authenticates the same way the API client does. */
     val imageLoaderClient: OkHttpClient by lazy {

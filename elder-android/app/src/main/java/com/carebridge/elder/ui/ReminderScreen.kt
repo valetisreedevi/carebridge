@@ -111,6 +111,21 @@ fun ReminderScreen(
             color = Green,
         )
 
+        // Without this she takes the first tablet, sees the screen change, and
+        // puts the phone down — which is exactly how two doses used to go
+        // unanswered and escalate to her family. Only shown when there is in
+        // fact more than one; a single dose should not be made to look like a
+        // list of chores.
+        if (state.total > 1) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "${state.position} of ${state.total}",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Ink.copy(alpha = 0.65f),
+            )
+        }
+
         Spacer(Modifier.height(24.dp))
 
         MedicinePicture(

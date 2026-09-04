@@ -24,7 +24,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-const val REMINDER_CHANNEL_ID = "carebridge_reminders"
+// Bumped from "carebridge_reminders". A channel's sound, importance and
+// vibration are frozen at creation, so the only way to change any of them on a
+// phone that already has the app is a new id. The old one is deleted below so
+// it stops appearing in the system settings screen.
+const val REMINDER_CHANNEL_ID = "carebridge_reminders_v2"
+private const val LEGACY_REMINDER_CHANNEL_ID = "carebridge_reminders"
+
+/**
+ * One id for every reminder, on purpose.
+ *
+ * It used to be the event id's hash, so three medicines due at 8pm stacked
+ * three notifications and rang three alarm tones over each other. They are one
+ * moment in the elder's evening, and they get one notification. It also makes
+ * the notification addressable: the activity can cancel it by id the instant
+ * it takes over the screen, which is what stops the alarm playing underneath
+ * the family's recorded voice.
+ */
+const val REMINDER_NOTIFICATION_ID = 1
+
 private const val TAG = "CareBridge"
 
 class CareBridgeMessagingService : FirebaseMessagingService() {
@@ -85,12 +103,24 @@ fun ensureReminderChannel(context: Context) {
         enableVibration(true)
         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
 
-        // The channel rings on the alarm stream too, so the phone is audible
-        // even in the case where the app never gets to play the recording.
-        // NOTE: channel settings are frozen at creation. Changing this line
-        // does nothing on a phone that already has the app — uninstall first.
+        // A notification tone carried on alarm ATTRIBUTES: short asset, alarm
+        // routing. The attributes are what Android gates on, so this still
+        // sounds through silent, vibrate and Do Not Disturb — which is the
+        // whole reason it was on the alarm stream in the first place.
+        //
+        // The asset changed from TYPE_ALARM because an alarm tone is a long,
+        // internally looping file. ReminderActivity cancels this notification
+        // the moment it starts, but there is a real race between the push
+        // arriving and the activity being alive, and losing that race against
+        // a looping alarm means seconds of ringing underneath the recording.
+        // A notification tone is over in about a second, so the worst case is
+        // a blip rather than a minute of noise.
+        //
+        // Deliberately NOT silent: when "Display over other apps" is refused
+        // and the full-screen intent is withheld, this sound is the only thing
+        // that reaches her, and silence there is a missed dose.
         setSound(
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -98,8 +128,10 @@ fun ensureReminderChannel(context: Context) {
         )
     }
 
-    context.getSystemService(NotificationManager::class.java)
-        .createNotificationChannel(channel)
+    val manager = context.getSystemService(NotificationManager::class.java)
+    // Leaves no stale, still-loud channel behind in the settings screen.
+    runCatching { manager.deleteNotificationChannel(LEGACY_REMINDER_CHANNEL_ID) }
+    manager.createNotificationChannel(channel)
 }
 
 /**
@@ -179,7 +211,7 @@ fun showReminder(
 
     val pending = PendingIntent.getActivity(
         context,
-        (eventId ?: "active").hashCode(),
+        REMINDER_NOTIFICATION_ID,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
@@ -201,7 +233,7 @@ fun showReminder(
 
     runCatching {
         NotificationManagerCompat.from(context)
-            .notify((eventId ?: "active").hashCode(), notification)
+            .notify(REMINDER_NOTIFICATION_ID, notification)
     }
 
     // Then raise the screen ourselves. On a phone that grants the full-screen
