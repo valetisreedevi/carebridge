@@ -59,6 +59,9 @@ fun ReminderScreen(
     onMic: () -> Unit,
     onTaken: () -> Unit,
     onSnooze: () -> Unit,
+    onRetry: () -> Unit = {},
+    playing: Boolean = false,
+    onPlayAgain: () -> Unit = {},
 ) {
     val language = state.reminder?.language
 
@@ -71,6 +74,47 @@ fun ReminderScreen(
     }
 
     val reminder = state.reminder
+
+    // A phone that could not be reached is not a phone with nothing to do.
+    // These used to render identically, which meant a failed wake looked to
+    // her exactly like a quiet evening — and the dose went unanswered.
+    if (state.failed) {
+        Column(
+            modifier = Modifier.fillMaxSize().background(Paper).padding(36.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                Copy.couldNotCheck(language),
+                fontSize = 30.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Ink,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                Copy.couldNotCheckHint(language),
+                fontSize = 20.sp,
+                color = Muted,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(32.dp))
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth().height(76.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Green),
+            ) {
+                Text(
+                    Copy.tryAgain(language),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Paper,
+                )
+            }
+        }
+        return
+    }
 
     if (reminder == null) {
         Column(
@@ -177,6 +221,20 @@ fun ReminderScreen(
         state.notice?.let {
             Spacer(Modifier.height(18.dp))
             Text(it, fontSize = 20.sp, color = Amber, textAlign = TextAlign.Center)
+        }
+
+        // Only when there is a recording to hear. A dose with no voice should
+        // not offer a button that does nothing.
+        if (reminder.hasCaregiverAudio || reminder.caregiverAudioUrl != null) {
+            Spacer(Modifier.height(24.dp))
+            TextButton(onClick = onPlayAgain, enabled = !playing) {
+                Text(
+                    if (playing) Copy.nowPlaying(language) else Copy.playAgain(language),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (playing) Muted else Green,
+                )
+            }
         }
 
         Spacer(Modifier.height(36.dp))

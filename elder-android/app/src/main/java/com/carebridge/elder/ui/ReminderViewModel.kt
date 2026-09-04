@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class Turn(val fromElder: Boolean, val text: String)
@@ -24,6 +25,14 @@ data class ReminderUiState(
     val turns: List<Turn> = emptyList(),
     val busy: Boolean = false,
     val notice: String? = null,
+    /**
+     * The fetch failed, as opposed to succeeding and finding nothing.
+     *
+     * Without this the two are indistinguishable on screen — an elder who
+     * could not be reached and an elder with nothing due saw the same words,
+     * and so did the person debugging it.
+     */
+    val failed: Boolean = false,
     /** Set once the LAST dose in the round is answered, not the first. */
     val finished: String? = null,
 ) {
@@ -44,17 +53,34 @@ class ReminderViewModel : ViewModel() {
     private val _state = MutableStateFlow(ReminderUiState())
     val state: StateFlow<ReminderUiState> = _state.asStateFlow()
 
+    /** Remembered so the retry button does not need it passed back in. */
+    private var lastEventId: String? = null
+
+    fun retry() = load(lastEventId)
+
     fun load(eventId: String?) {
+        lastEventId = eventId
+
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, notice = null) }
+            _state.update { it.copy(loading = true, notice = null, failed = false) }
 
             // Always fetch the whole round. A specific event id decides where
             // in it she starts, not whether the rest exists.
-            val result = runCatching {
-                val active = ApiClient.api.activeReminder()
+            suspend fun fetch() = ApiClient.api.activeReminder().let { active ->
                 if (active.reminders.isNotEmpty()) active.reminders
                 // An older API build sends only the singular field.
                 else listOfNotNull(active.reminder)
+            }
+
+            // This runs the instant a sleeping phone is woken by a push, which
+            // is frequently before its radio has reconnected. One attempt was
+            // enough to lose the whole reminder: the fetch failed, the screen
+            // said there was nothing due, and a dose that WAS due went unseen.
+            var result = runCatching { fetch() }
+            for (waitMs in listOf(1_500L, 4_000L)) {
+                if (result.isSuccess) break
+                delay(waitMs)
+                result = runCatching { fetch() }
             }
 
             _state.update {
@@ -69,6 +95,7 @@ class ReminderViewModel : ViewModel() {
                     onFailure = { _ ->
                         it.copy(
                             loading = false,
+                            failed = true,
                             notice = "Cannot reach CareBridge right now.",
                         )
                     },

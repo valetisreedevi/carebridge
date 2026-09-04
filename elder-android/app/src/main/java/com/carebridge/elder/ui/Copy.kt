@@ -40,6 +40,24 @@ object Copy {
         if (language == TELUGU) "సరే, పది నిమిషాల్లో మళ్ళీ గుర్తు చేస్తాను."
         else "Alright, I will remind you again in ten minutes."
 
+    fun playAgain(language: String?) =
+        if (language == TELUGU) "మళ్ళీ వినండి" else "Hear it again"
+
+    fun nowPlaying(language: String?) =
+        if (language == TELUGU) "వినిపిస్తోంది..." else "Playing..."
+
+    /** Shown when the phone could not reach the server, not when nothing is due. */
+    fun couldNotCheck(language: String?) =
+        if (language == TELUGU) "మందు వివరాలు చూడలేకపోయాను"
+        else "I could not check your medicines"
+
+    fun couldNotCheckHint(language: String?) =
+        if (language == TELUGU) "ఇంటర్నెట్ కనెక్షన్ చూడండి, మళ్ళీ ప్రయత్నించండి."
+        else "Check the internet connection, then try again."
+
+    fun tryAgain(language: String?) =
+        if (language == TELUGU) "మళ్ళీ ప్రయత్నించు" else "Try again"
+
     fun nothingDue(language: String?) =
         if (language == TELUGU) "ప్రస్తుతం మందు ఏదీ లేదు" else "Nothing to take right now"
 

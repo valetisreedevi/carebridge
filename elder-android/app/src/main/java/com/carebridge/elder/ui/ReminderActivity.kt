@@ -40,6 +40,9 @@ class ReminderActivity : ComponentActivity() {
 
         /** Long enough to walk to the kitchen; short enough to not sit lit. */
         private const val GIVE_UP_AFTER_MS = 3 * 60 * 1000L
+
+        /** How long the family's recording gets before we speak instead. */
+        private const val AUDIO_PATIENCE_MS = 3_000L
     }
 
     private var tts: TextToSpeech? = null
@@ -50,6 +53,18 @@ class ReminderActivity : ComponentActivity() {
     private val model: ReminderViewModel by viewModels()
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var giveUp: Runnable? = null
+    private var waitingForAudio: Runnable? = null
+    private var audioStarted = false
+
+    /**
+     * Whether the family's voice is sounding right now.
+     *
+     * Compose state because the screen shows it: a silent phone and a phone
+     * part-way through a recording looked identical, and there was no way at
+     * all to ask for it again — so an elder who stepped out of the room simply
+     * lost her daughter's voice for that dose.
+     */
+    private var playing by mutableStateOf(false)
 
     /** The elder's language, as the server reports it — not the handset's. */
     private var language: String? = null
@@ -146,6 +161,9 @@ class ReminderActivity : ComponentActivity() {
                 },
                 onTaken = model::markTaken,
                 onSnooze = { model.snooze() },
+                onRetry = model::retry,
+                playing = playing,
+                onPlayAgain = ::replayVoice,
             )
 
             LaunchedEffect(state.finished) {
@@ -197,6 +215,21 @@ class ReminderActivity : ComponentActivity() {
         handler.postDelayed(task, GIVE_UP_AFTER_MS)
     }
 
+    /** Plays the current dose's recording again, on request. */
+    private fun replayVoice() {
+        val reminder = model.state.value.reminder ?: return
+        val spoken = Copy.spokenPrompt(
+            reminder.language,
+            reminder.medicationName ?: "medicine",
+        )
+        val url = reminder.caregiverAudioUrl
+
+        stopVoice()
+        if (url == null) speak(spoken)
+        else playCaregiverVoice(ApiClient.absolute(url), spoken)
+        armGiveUp()
+    }
+
     private fun dismissNotification() {
         runCatching {
             NotificationManagerCompat.from(this).cancel(REMINDER_NOTIFICATION_ID)
@@ -211,6 +244,7 @@ class ReminderActivity : ComponentActivity() {
      * the gap.
      */
     private fun stopVoice() {
+        playing = false
         player?.let { existing ->
             runCatching { if (existing.isPlaying) existing.stop() }
             existing.release()
@@ -270,6 +304,26 @@ class ReminderActivity : ComponentActivity() {
             speak(spokenFallback)
         }
 
+        // The recording is DOWNLOADED here, and a phone that has just been
+        // woken by a push often has a radio that is not up yet. An error is
+        // handled below; being merely slow was not, and a pending prepare is
+        // silence with nothing on screen to explain it. An elder waiting in a
+        // quiet room cannot tell that apart from a reminder that never came.
+        //
+        // So the recording gets three seconds. After that she is told out loud
+        // what to take, which is the whole promise: silence is the one outcome
+        // this must never produce.
+        waitingForAudio?.let { handler.removeCallbacks(it) }
+        val giveUpOnAudio = Runnable {
+            if (audioStarted) return@Runnable
+            Log.w(TAG, "audio_too_slow speaking instead")
+            stopVoice()
+            fallBackToSpeech()
+        }
+        waitingForAudio = giveUpOnAudio
+        audioStarted = false
+        handler.postDelayed(giveUpOnAudio, AUDIO_PATIENCE_MS)
+
         val started = runCatching {
             player?.release()
             takeAudioFocus()
@@ -284,17 +338,26 @@ class ReminderActivity : ComponentActivity() {
                     ApiClient.mediaHeaders(url),
                 )
                 setOnPreparedListener {
+                    // Won the race against the timeout above.
+                    if (waitingForAudio === giveUpOnAudio) {
+                        handler.removeCallbacks(giveUpOnAudio)
+                    }
+                    audioStarted = true
+                    playing = true
                     Log.i(TAG, "audio_started ms=${it.duration} vol=$volume/$max")
                     it.start()
                 }
                 setOnCompletionListener {
                     Log.i(TAG, "audio_completed")
+                    playing = false
                     releaseAudioFocus()
                     it.release()
                     if (player === it) player = null
                 }
                 setOnErrorListener { failed, what, extra ->
                     Log.w(TAG, "audio_error what=$what extra=$extra")
+                    handler.removeCallbacks(giveUpOnAudio)
+                    playing = false
                     failed.release()
                     if (player === failed) player = null
                     fallBackToSpeech()
