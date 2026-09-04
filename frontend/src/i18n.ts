@@ -22,6 +22,13 @@ export const LANGUAGE_CHOICES: { code: Language; label: string }[] = [
 type Entry = Record<Language, string>;
 
 const STRINGS = {
+  /** Only while a saved session is being restored. Distinct from oneMoment,
+   *  which also labels a busy microphone and a pending permission prompt —
+   *  three different waits wearing one sentence made a hang unreadable. */
+  checkingThisPhone: {
+    en: "Checking this phone…",
+    te: "ఈ ఫోన్‌ను చూస్తున్నాను…",
+  },
   oneMoment: {
     en: "One moment…",
     te: "ఒక్క నిమిషం…",

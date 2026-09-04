@@ -205,14 +205,37 @@ export default function ElderView() {
 
   // Firebase restores a session asynchronously, so polling before this
   // resolves would fetch with no credential and fail on every first load.
-  useEffect(
-    () =>
-      watchElder(elderId ?? "", (user) => {
-        if (!firebaseConfigured || !elderId) return;
-        setCredential(user ? "paired" : "unpaired");
-      }),
-    [elderId],
-  );
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+
+    // Nothing paired means there is nothing to resolve, and saying so here is
+    // the only way out of the initial state. This used to subscribe a watcher
+    // to elderAuthFor("") whose callback was guarded on the very id that was
+    // missing — so setCredential was never called, "resolving" never ended,
+    // and the page sat on "One moment…" with the pairing screen behind it,
+    // unreachable. On a browser with nothing paired — which is every browser a
+    // new person opens — the app could not be set up at all.
+    if (!elderId) {
+      setCredential("unpaired");
+      return;
+    }
+
+    return watchElder(elderId, (user) => {
+      setCredential(user ? "paired" : "unpaired");
+    });
+  }, [elderId]);
+
+  // Even with that fixed, this state depends on Firebase calling back at all.
+  // A blocked storage context or a restore that never completes would hang the
+  // page again with nothing on it to act on. Showing the pairing screen to
+  // somebody already paired costs them one tap; showing a dead page to
+  // somebody trying to set the phone up costs them the product.
+  useEffect(() => {
+    if (credential !== "resolving") return;
+
+    const giveUp = setTimeout(() => setCredential("unpaired"), 6000);
+    return () => clearTimeout(giveUp);
+  }, [credential]);
 
   const ready = credential === "paired" && Boolean(elderId);
 
@@ -521,7 +544,7 @@ export default function ElderView() {
   if (credential === "resolving") {
     return (
       <main className="elder elder--calm">
-        <p className="elder__muted">{t("oneMoment", lang)}</p>
+        <p className="elder__muted">{t("checkingThisPhone", lang)}</p>
       </main>
     );
   }
