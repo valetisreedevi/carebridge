@@ -24,6 +24,7 @@ const SUBHEADING: Record<Mode, string> = {
 
 export default function SignIn() {
   const [mode, setMode] = useState<Mode>("in");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -56,7 +57,7 @@ export default function SignIn() {
       if (mode === "in") {
         await signInWithPassword(email.trim(), password);
       } else if (mode === "up") {
-        await registerWithPassword(email.trim(), password);
+        await registerWithPassword(email.trim(), password, name);
       } else {
         await sendPasswordReset(email.trim());
         setNotice(
@@ -102,6 +103,21 @@ export default function SignIn() {
         <p className="signin__sub">{SUBHEADING[mode]}</p>
 
         <form className="signin__form" onSubmit={submit}>
+          {mode === "up" && (
+            <label>
+              Your name
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+                placeholder="Sridevi"
+              />
+              <small className="signin__hint">
+                What CareBridge calls you. Your email stays private.
+              </small>
+            </label>
+          )}
+
           <label>
             Email
             <input

@@ -10,6 +10,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  updateProfile,
   signInWithCustomToken,
   signInWithPopup,
   signOut,
@@ -205,13 +206,32 @@ export async function signInWithPassword(email: string, password: string) {
   await signInWithEmailAndPassword(auth, email, password);
 }
 
-export async function registerWithPassword(email: string, password: string) {
+export async function registerWithPassword(
+  email: string,
+  password: string,
+  name?: string,
+) {
   if (!auth) throw new Error("Sign-in is not configured");
   const credential = await createUserWithEmailAndPassword(auth, email, password);
+
+  // Asked for at sign-up so the app has something to call them other than
+  // their email address, which does not belong in a screen-shared header.
+  if (name?.trim()) {
+    await updateProfile(credential.user, { displayName: name.trim() });
+  }
 
   // Sent on every new account. Whether an unconfirmed address may actually use
   // the API is the backend's REQUIRE_VERIFIED_EMAIL call, not the browser's.
   await sendEmailVerification(credential.user);
+}
+
+/** Lets someone who signed up before the name field existed set one. */
+export async function setDisplayName(name: string): Promise<void> {
+  if (!auth?.currentUser) throw new Error("Not signed in");
+  await updateProfile(auth.currentUser, { displayName: name.trim() });
+  // onAuthStateChanged does not fire for a profile edit, so nudge the
+  // listeners that are already watching this user.
+  await auth.currentUser.reload();
 }
 
 export async function resendVerificationEmail() {

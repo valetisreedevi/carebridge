@@ -16,3 +16,7 @@ google-services.json
 
 .DS_Store
 .idea/
+
+# Firestore dumps taken before a destructive cleanup. Real elders, real
+# medicines, real caregiver ids — useful to keep on disk, never in the repo.
+backend/firestore-backup-*.json

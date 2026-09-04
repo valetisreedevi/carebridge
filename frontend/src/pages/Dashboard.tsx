@@ -97,6 +97,132 @@ function needsAttention(item: DayItem): boolean {
   );
 }
 
+
+/** The alerts list, which was a flat wall of every notification ever sent.
+ *
+ *  Fifty rows, each an identical sentence and a full timestamp, newest first.
+ *  Nothing receded once it was handled and nothing stood out while it was not,
+ *  so the only way to find this morning's escalation was to read all of them.
+ *
+ *  Three things changed. Days became headings, so "when" is read once per group
+ *  rather than parsed per row. Repeats collapsed, because the same tablet
+ *  failing three evenings running is one fact about a week, not three facts.
+ *  And a reminder that never reached her phone is marked as ours, since the
+ *  whole argument of this product is that those two failures are different.
+ */
+function Alerts({ alerts }: { alerts: Alert[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (alerts.length === 0) {
+    return (
+      <p className="empty">
+        Nothing has needed your attention. CareBridge only writes here when
+        something does.
+      </p>
+    );
+  }
+
+  const dayOf = (iso: string) => new Intl.DateTimeFormat("en-CA").format(new Date(iso));
+  const today = dayOf(new Date().toISOString());
+  const yesterday = dayOf(new Date(Date.now() - 86400000).toISOString());
+
+  const heading = (day: string) => {
+    if (day === today) return "Today";
+    if (day === yesterday) return "Yesterday";
+    return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+    });
+  };
+
+  // Same sentence on the same day is one row with a count. The message already
+  // names the medicine and the time, so identical text means identical event.
+  const days: { day: string; rows: (Alert & { times: number })[] }[] = [];
+  for (const alert of alerts) {
+    const day = dayOf(alert.created_at);
+    let group = days.find((d) => d.day === day);
+    if (!group) days.push((group = { day, rows: [] }));
+
+    const seen = group.rows.find((r) => r.message === alert.message);
+    if (seen) seen.times += 1;
+    else group.rows.push({ ...alert, times: 1 });
+  }
+
+  const shown = expanded ? days : days.slice(0, 2);
+  const hidden = days.slice(shown.length).reduce((n, d) => n + d.rows.length, 0);
+
+  return (
+    <>
+      {shown.map((group) => (
+        <div className="alerts__day" key={group.day}>
+          <h3 className="alerts__heading">{heading(group.day)}</h3>
+          <ul className="alerts">
+            {group.rows.map((alert) => {
+              // The distinction the whole product is built on: a phone we
+              // never reached is our failure, not hers.
+              const ours = alert.reason.toUpperCase() === "UNREACHABLE";
+
+              return (
+                <li
+                  key={alert.id}
+                  className={`alerts__item alerts__item--${alert.reason.toLowerCase()} ${
+                    ours ? "alerts__item--ours" : ""
+                  }`}
+                >
+                  <span className="alerts__what">
+                    {alert.message}
+                    {alert.times > 1 && (
+                      <small className="alerts__times">· {alert.times} times</small>
+                    )}
+                  </span>
+
+                  <span className="alerts__meta">
+                    {ours && <span className="alerts__ours">ours to fix</span>}
+                    <small title={new Date(alert.created_at).toLocaleString()}>
+                      {group.day === today
+                        ? sinceWhen(alert.created_at)
+                        : new Date(alert.created_at).toLocaleTimeString(undefined, {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                    </small>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+
+      {hidden > 0 && !expanded && (
+        <button
+          type="button"
+          className="btn-quiet alerts__more"
+          onClick={() => setExpanded(true)}
+        >
+          Show earlier ({hidden})
+        </button>
+      )}
+    </>
+  );
+}
+
+/** Enough of an address to tell two people apart, not enough to read out.
+ *
+ *  The care team list keeps an address rather than a name on purpose: this is
+ *  the identity that received the invite and that escalation email will go to,
+ *  and removing the wrong person from it is a safety mistake, not a cosmetic
+ *  one. Masking keeps that check possible without putting a full address on
+ *  screen for everyone in the room.
+ */
+function maskEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  if (!domain) return value;
+  const head = local.slice(0, 3);
+  return `${head}${local.length > 3 ? "•••" : ""}@${domain}`;
+}
+
 /** The elder's own today, as YYYY-MM-DD. en-CA is the shortest way to get
  *  an ISO date out of Intl, and the course dates are stored in that shape. */
 function todayIn(zone: string): string {
@@ -929,8 +1055,12 @@ export default function Dashboard() {
                   <ul className="team__list">
                     {team.map((member) => (
                       <li key={member.caregiver_id}>
-                        <span>
-                          {member.email ?? member.name ?? member.caregiver_id}
+                        <span title={member.email ?? undefined}>
+                          {member.name?.trim()
+                            ? member.name
+                            : member.email
+                              ? maskEmail(member.email)
+                              : member.caregiver_id}
                           {member.is_you && <small> · you</small>}
                         </span>
                         {!member.is_you && team.length > 1 && (
@@ -1252,24 +1382,7 @@ export default function Dashboard() {
               <h2>Alerts</h2>
             </div>
 
-            {alerts.length === 0 ? (
-              <p className="empty">
-                Nothing has needed your attention. CareBridge only writes here
-                when something does.
-              </p>
-            ) : (
-              <ul className="alerts">
-                {alerts.map((alert) => (
-                  <li
-                    key={alert.id}
-                    className={`alerts__item alerts__item--${alert.reason.toLowerCase()}`}
-                  >
-                    <span>{alert.message}</span>
-                    <small>{new Date(alert.created_at).toLocaleString()}</small>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <Alerts alerts={alerts} />
           </section>
           )}
 

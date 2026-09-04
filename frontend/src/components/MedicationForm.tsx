@@ -17,13 +17,6 @@ const FOOD_OPTIONS = [
 /** The API takes up to six; more than that is not a prescription any more. */
 const MAX_TIMES = 6;
 
-const TIMES_PER_DAY = [
-  { count: 1, label: "Once a day" },
-  { count: 2, label: "Twice a day" },
-  { count: 3, label: "Three times a day" },
-  { count: 4, label: "Four times a day" },
-];
-
 /** How long a doctor prescribes for, in the words they use.
  *
  *  Zero is "ongoing", and it has to be a real value rather than an absence:
@@ -41,17 +34,33 @@ const DURATION_OPTIONS = [
   { days: 90, label: "3 months" },
 ];
 
-/** Where a day's doses fall when nobody has said otherwise.
+/** The parts of a day a dose is actually prescribed for.
  *
- *  A caregiver holding a prescription slip knows how many times a day, not
- *  which hours — the hours are ours to suggest and theirs to correct.
+ *  "Twice a day" is underdetermined - it can mean morning and night, morning
+ *  and afternoon, or afternoon and night - so asking for a count and inventing
+ *  the hours was a guess. A slip says WHICH parts of the day, so that is what
+ *  this asks. The count falls out of the answer.
+ *
+ *  `from`/`to` are hours, half-open, and every hour of the day belongs to
+ *  exactly one slot so a time can never light up two chips.
  */
-const DEFAULT_TIMES: Record<number, string[]> = {
-  1: ["08:00"],
-  2: ["08:00", "20:00"],
-  3: ["08:00", "14:00", "20:00"],
-  4: ["08:00", "13:00", "17:00", "21:00"],
-};
+const SLOTS = [
+  { key: "morning", label: "Morning", at: "08:00", from: 0, to: 12 },
+  { key: "afternoon", label: "Afternoon", at: "14:00", from: 12, to: 17 },
+  { key: "evening", label: "Evening", at: "18:00", from: 17, to: 20 },
+  { key: "night", label: "Night", at: "21:00", from: 20, to: 24 },
+];
+
+type Slot = (typeof SLOTS)[number];
+
+function hourOf(hhmm: string): number {
+  return Number(hhmm.split(":")[0]);
+}
+
+function inSlot(hhmm: string, slot: Slot): boolean {
+  const hour = hourOf(hhmm);
+  return hour >= slot.from && hour < slot.to;
+}
 
 function shiftBy(hhmm: string, minutes: number): string {
   const [h, m] = hhmm.split(":").map(Number);
@@ -60,13 +69,10 @@ function shiftBy(hhmm: string, minutes: number): string {
   return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
 }
 
-function defaultTimes(count: number, food: string): string[] {
-  // A once-daily tablet taken after food is almost always the evening one.
-  if (count === 1 && food === "AFTER_FOOD") return ["20:00"];
-
-  const base = DEFAULT_TIMES[count] ?? DEFAULT_TIMES[1];
+/** When a dose in this slot lands, given the food rule. */
+function slotTime(slot: Slot, food: string): string {
   // Otherwise "after food" would land at exactly the hour of the meal.
-  return food === "AFTER_FOOD" ? base.map((t) => shiftBy(t, 30)) : base;
+  return food === "AFTER_FOOD" ? shiftBy(slot.at, 30) : slot.at;
 }
 
 /** Morning-afternoon-night, the way the prescription itself is written.
@@ -138,16 +144,36 @@ export default function MedicationForm({
   const removeTimeAt = (index: number) =>
     setTimes((current) => current.filter((_, i) => i !== index));
 
+  /** Turning a part of the day on adds its dose; turning it off removes it. */
+  const toggleSlot = (slot: Slot) => {
+    setTimes((current) => {
+      const mine = current.filter((t) => inSlot(t, slot));
+
+      if (mine.length) {
+        const left = current.filter((t) => !inSlot(t, slot));
+        // A medicine with no time at all is not a medicine. The last chip
+        // stays on rather than leaving the form in a state it cannot save.
+        return left.length ? left : current;
+      }
+
+      if (current.length >= MAX_TIMES) return current;
+      return [...current, slotTime(slot, food)].sort();
+    });
+  };
+
   const changeFood = (next: string) => {
     setFood(next);
-    // Only re-suggest while the caregiver is still on our suggestions. Once
-    // they have typed their own hours, changing the food rule must not throw
-    // those away.
-    setTimes((current) => {
-      const suggested = defaultTimes(current.length, food);
-      const untouched = current.every((t, i) => t === suggested[i]);
-      return untouched ? defaultTimes(current.length, next) : current;
-    });
+    // Only re-suggest hours the caregiver never touched. A time that still
+    // matches one of our own suggestions moves with the food rule; anything
+    // they typed themselves is left exactly where they put it.
+    setTimes((current) =>
+      current
+        .map((t) => {
+          const slot = SLOTS.find((sl) => slotTime(sl, food) === t);
+          return slot ? slotTime(slot, next) : t;
+        })
+        .sort(),
+    );
   };
 
   const toggleRecording = async () => {
@@ -282,37 +308,38 @@ export default function MedicationForm({
           </select>
         </label>
 
-        <label>
-          How many times a day
-          <select
-            value={TIMES_PER_DAY.some((o) => o.count === times.length)
-              ? times.length
-              : "custom"}
-            onChange={(e) => setTimes(defaultTimes(Number(e.target.value), food))}
-          >
-            {TIMES_PER_DAY.map((option) => (
-              <option key={option.count} value={option.count}>
-                {option.label}
-              </option>
-            ))}
-            {/* Only reachable by adding rows by hand — a prescription is never
-                written as "five times a day" in the first instance. */}
-            {!TIMES_PER_DAY.some((o) => o.count === times.length) && (
-              <option value="custom">{times.length} times a day</option>
-            )}
-          </select>
-          {/* The notation the slip is actually written in, echoed back so a
-              caregiver copying one across can check themselves. Read-only:
-              parsing it as input would guess at dosing, and 1-0-1 already
-              disagrees with the Dose field about what the 1 means. */}
-          <small className="medform__hint">
-            {slipNotation(times)} · morning-afternoon-night
-          </small>
-        </label>
       </div>
 
       <fieldset className="medform__times">
-        <legend>What time for {elderName}</legend>
+        <legend>When does {elderName} take it</legend>
+
+        <div className="medform__slots" role="group" aria-label="Parts of the day">
+          {SLOTS.map((slot) => {
+            const on = times.some((t) => inSlot(t, slot));
+            return (
+              <button
+                key={slot.key}
+                type="button"
+                className={`slot ${on ? "slot--on" : ""}`}
+                aria-pressed={on}
+                onClick={() => toggleSlot(slot)}
+              >
+                {slot.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* The notation the slip is actually written in, echoed back so a
+            caregiver copying one across can check themselves. Three buckets,
+            not four: evening counts as night here because that is how the
+            slip counts it. Read-only - parsing it as input would guess at
+            dosing, and 1-0-1 already disagrees with the Dose field about what
+            the 1 means. */}
+        <p className="medform__notation">
+          <strong>{slipNotation(times)}</strong>
+          <small>morning-afternoon-night</small>
+        </p>
 
         {times.map((t, index) => (
           <div className="medform__timeRow" key={index}>

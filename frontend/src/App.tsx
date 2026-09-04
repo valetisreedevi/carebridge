@@ -13,6 +13,7 @@ import {
   emailIsVerified,
   firebaseConfigured,
   resendVerificationEmail,
+  setDisplayName,
   signOutCaregiver,
   watchUser,
 } from "./api/firebase";
@@ -20,6 +21,79 @@ import AuthAction from "./pages/AuthAction";
 import Dashboard from "./pages/Dashboard";
 import ElderView from "./pages/ElderView";
 import SignIn from "./pages/SignIn";
+
+/** Something to call them that is not their email address.
+ *
+ *  A header sits on screen through every screen-share, every screenshot and
+ *  every demo recording, and it is telling the one person who already knows.
+ *  The address itself stays in the tooltip, for the one case that needs it:
+ *  working out which account you are signed in as on a shared computer.
+ */
+function callThem(user: User): string {
+  if (user.displayName?.trim()) return user.displayName.trim();
+
+  const local = (user.email ?? "").split("@")[0].replace(/[._-]+/g, " ").trim();
+  if (!local) return "Your account";
+
+  // Trailing digits are almost always an availability tax, not a name.
+  const words = local.replace(/\d+$/, "").trim() || local;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function Account({ user }: { user: User }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(user.displayName ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      await setDisplayName(draft);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <form className="nav__account" onSubmit={save}>
+        <input
+          className="nav__nameInput"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="What should we call you?"
+          aria-label="Your name"
+          autoFocus
+        />
+        <button type="submit" disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <span className="nav__account">
+      <button
+        type="button"
+        className="nav__name"
+        onClick={() => setEditing(true)}
+        title={user.email ?? undefined}
+      >
+        {callThem(user)}
+      </button>
+      <button type="button" onClick={signOutCaregiver}>
+        Sign out
+      </button>
+    </span>
+  );
+}
 
 function Nav({ user }: { user: User | null }) {
   const { pathname } = useLocation();
@@ -42,14 +116,7 @@ function Nav({ user }: { user: User | null }) {
         Elder device
       </Link>
 
-      {user && (
-        <span className="nav__account">
-          <span className="nav__email">{user.email}</span>
-          <button type="button" onClick={signOutCaregiver}>
-            Sign out
-          </button>
-        </span>
-      )}
+      {user && <Account user={user} />}
     </nav>
   );
 }

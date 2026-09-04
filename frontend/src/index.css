@@ -192,13 +192,6 @@ textarea:focus {
   color: var(--muted);
 }
 
-.nav__email {
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .nav__account button {
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
@@ -499,6 +492,93 @@ textarea:focus {
 .alerts__item small {
   opacity: 0.8;
   font-size: 0.78rem;
+}
+
+/* Days are read once as a heading rather than decoded from a timestamp on
+   every row, which is what made fifty alerts unreadable. */
+.alerts__day + .alerts__day {
+  margin-top: 1.15rem;
+}
+
+.alerts__heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.alerts__item {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.alerts__what {
+  flex: 1 1 auto;
+}
+
+.alerts__times {
+  margin-left: 0.4rem;
+  opacity: 0.75;
+}
+
+.alerts__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* A reminder that never reached her phone is our failure. It reads as a
+   different kind of thing from a dose she was asked about and did not take —
+   quieter, and labelled, rather than another red row blaming her. */
+.alerts__item--ours {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.alerts__ours {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: lowercase;
+  opacity: 0.85;
+}
+
+.alerts__more {
+  margin-top: 1rem;
+}
+
+/* The account control in the header. The name is a button because it is also
+   how you change it; it should not look like one until you go near it. */
+.nav__name {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.45rem;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nav__name:hover,
+.nav__name:focus-visible {
+  border-color: var(--line);
+}
+
+.nav__nameInput {
+  width: 12rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
 }
 
 /* ---------------- medication form ---------------- */
@@ -1762,6 +1842,55 @@ textarea:focus {
 .medform__timeRow .medform__hint {
   margin-top: 0;
   flex: 1 1 auto;
+}
+
+/* Which parts of the day, asked before the clock times it produces. A slip
+   says "morning and night", not "twice a day at eight and eight". */
+.medform__slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.slot {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--page);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.slot:hover {
+  border-color: var(--ink-soft);
+}
+
+.slot--on {
+  background: var(--accent, var(--ink));
+  border-color: var(--accent, var(--ink));
+  color: var(--page);
+}
+
+/* The slip notation, given room of its own rather than buried as a hint -
+   it is the line a caregiver checks their prescription against. */
+.medform__notation {
+  margin: 0 0 0.8rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.medform__notation strong {
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
+.medform__notation small {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .medform__fallback {
