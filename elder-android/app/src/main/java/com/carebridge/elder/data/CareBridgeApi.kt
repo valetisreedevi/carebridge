@@ -59,6 +59,32 @@ data class ActiveReminder(
     val remaining: Int = 0,
 )
 
+/**
+ * One line of today, as the elder's own phone is told it.
+ *
+ * Deliberately thin. The caregiver's version of this carries attempt counts,
+ * escalation times and whether we reached a phone — the working out of people
+ * doing the worrying, and none of it hers. She gets the plan and one word for
+ * where each dose stands.
+ */
+data class MyDayItem(
+    @Json(name = "medication_id") val medicationId: String,
+    @Json(name = "medication_name") val medicationName: String? = null,
+    val dose: String? = null,
+    @Json(name = "food_instruction") val foodInstruction: String? = null,
+    @Json(name = "local_time") val localTime: String = "",
+    /** taken | now | later | missed | cancelled */
+    val state: String = "later",
+    @Json(name = "has_photo") val hasPhoto: Boolean = false,
+)
+
+data class MyDay(
+    val date: String? = null,
+    @Json(name = "elder_name") val elderName: String? = null,
+    val language: String? = null,
+    val items: List<MyDayItem> = emptyList(),
+)
+
 data class SnoozeBody(val minutes: Int)
 
 data class DeclineBody(val reason: String?)
@@ -110,6 +136,18 @@ interface CareBridgeApi {
 
     @GET("api/reminders/active")
     suspend fun activeReminder(): ActiveReminder
+
+    /**
+     * The whole day, for the times she opens the app with nothing due.
+     *
+     * activeReminder() answers only "what is due this minute", so opening the
+     * app at three in the afternoon said "Nothing to take right now" — the same
+     * sentence a failed reminder shows, and no answer to the question she
+     * actually opened it with, which is whether she already took the morning
+     * tablet.
+     */
+    @GET("api/my/today")
+    suspend fun myToday(): MyDay
 
     @GET("api/medication-events/{eventId}")
     suspend fun event(@Path("eventId") eventId: String): Reminder

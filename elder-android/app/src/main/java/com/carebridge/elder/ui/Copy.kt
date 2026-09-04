@@ -71,6 +71,27 @@ object Copy {
         if (language == TELUGU) "సమయం అయినప్పుడు CareBridge మీకు తెలియజేస్తుంది."
         else "CareBridge will let you know when it is time."
 
+    /* ---- the day list, shown when nothing is due ---- */
+
+    fun todaysMedicines(language: String?) =
+        if (language == TELUGU) "ఈ రోజు మందులు" else "Today's medicines"
+
+    fun doseTaken(language: String?) =
+        if (language == TELUGU) "తీసుకున్నారు" else "taken"
+
+    fun doseNow(language: String?) =
+        if (language == TELUGU) "ఇప్పుడు" else "due now"
+
+    fun doseLater(language: String?) =
+        if (language == TELUGU) "ఈ రోజు తర్వాత" else "later today"
+
+    fun doseMissed(language: String?) =
+        if (language == TELUGU) "తీసుకోలేదు" else "not taken"
+
+    fun nothingToday(language: String?) =
+        if (language == TELUGU) "ఈ రోజు మందులు ఏవీ లేవు."
+        else "No medicines are scheduled for today."
+
     /** Spoken when there is no recording, or the recording will not play. */
     fun spokenPrompt(language: String?, medicine: String) =
         if (language == TELUGU) "$medicine వేసుకోండి"

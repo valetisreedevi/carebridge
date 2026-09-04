@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.carebridge.elder.data.ApiClient
+import com.carebridge.elder.data.MyDayItem
 import com.carebridge.elder.ui.theme.Brand
 import com.carebridge.elder.ui.theme.BrandSoft
 import com.carebridge.elder.ui.theme.Card
@@ -121,14 +124,23 @@ fun ReminderScreen(
     }
 
     if (reminder == null) {
+        // The day is fetched with the queue and is allowed to be absent; the
+        // language then comes from it rather than from a reminder there is
+        // none of.
+        val dayLanguage = state.day?.language ?: language
+        val doses = state.day?.items.orEmpty().filter { it.state != "cancelled" }
+
         Column(
-            modifier = Modifier.fillMaxSize().background(Paper)
-                .safeDrawingPadding().padding(36.dp),
-            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Paper)
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                Copy.nothingDue(language),
+                Copy.nothingDue(dayLanguage),
                 fontSize = 34.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Ink,
@@ -136,11 +148,30 @@ fun ReminderScreen(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                state.notice ?: Copy.nothingDueHint(language),
+                state.notice ?: Copy.nothingDueHint(dayLanguage),
                 fontSize = 21.sp,
                 color = Muted,
                 textAlign = TextAlign.Center,
             )
+
+            // Opening the app off-schedule used to end here, on a sentence
+            // that is also what a failed reminder says. Somebody who cannot
+            // remember whether they took the morning tablet is exactly who
+            // this product is for.
+            if (doses.isNotEmpty()) {
+                Spacer(Modifier.height(36.dp))
+                Text(
+                    Copy.todaysMedicines(dayLanguage),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Ink,
+                )
+                Spacer(Modifier.height(16.dp))
+                doses.forEach { dose ->
+                    DayRow(dose = dose, language = dayLanguage)
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
         }
         return
     }
@@ -300,6 +331,94 @@ fun ReminderScreen(
         }
 
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * One dose of today, on the screen she sees when nothing is due.
+ *
+ * The photograph leads, because it is what she recognises fastest — the name
+ * can be in an alphabet she was never taught, and the picture is the whole
+ * reason the app asks the family for one. A taken dose keeps its tick: the
+ * picture says WHICH medicine, not whether she has had it, and collapsing
+ * those two would be worse than showing no picture at all.
+ */
+@Composable
+private fun DayRow(dose: MyDayItem, language: String?) {
+    val taken = dose.state == "taken"
+    val shape = RoundedCornerShape(18.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (taken) BrandSoft else Card)
+            .border(1.dp, if (taken) BrandSoft else Line, shape)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Paper),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (dose.hasPhoto) {
+                AsyncImage(
+                    model = ApiClient.absolute("/api/my/medications/${dose.medicationId}/image"),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    if (taken) "✓" else "○",
+                    fontSize = 24.sp,
+                    color = if (taken) Brand else Muted,
+                )
+            }
+        }
+
+        Spacer(Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                dose.localTime,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Ink,
+            )
+            Text(
+                dose.medicationName ?: "",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Ink,
+            )
+            val detail = listOfNotNull(
+                dose.dose?.takeIf { it.isNotBlank() },
+                dose.foodInstruction?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (detail.isNotBlank()) {
+                Text(detail, fontSize = 18.sp, color = Muted)
+            }
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        // The word as well as the colour. A tick and a circle at arm's length
+        // in a lit room are not reliably different things.
+        Text(
+            when (dose.state) {
+                "taken" -> Copy.doseTaken(language)
+                "now" -> Copy.doseNow(language)
+                "missed" -> Copy.doseMissed(language)
+                else -> Copy.doseLater(language)
+            },
+            fontSize = 17.sp,
+            fontWeight = if (taken) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (taken) Brand else Muted,
+        )
     }
 }
 

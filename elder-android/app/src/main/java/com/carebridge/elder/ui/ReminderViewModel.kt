@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.ChatBody
 import com.carebridge.elder.data.DeclineBody
+import com.carebridge.elder.data.MyDay
 import com.carebridge.elder.data.Reminder
 import com.carebridge.elder.data.SnoozeBody
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,14 @@ data class ReminderUiState(
     val failed: Boolean = false,
     /** Set once the LAST dose in the round is answered, not the first. */
     val finished: String? = null,
+    /**
+     * The rest of today, for the quiet screen.
+     *
+     * Kept apart from the queue on purpose: a day that will not load must
+     * never be the reason a dose goes unasked, so its failure leaves this null
+     * and changes nothing else.
+     */
+    val day: MyDay? = null,
 ) {
     /**
      * Derived rather than stored, so there is no second copy to fall out of
@@ -58,8 +67,25 @@ class ReminderViewModel : ViewModel() {
 
     fun retry() = load(lastEventId)
 
+    /**
+     * Today's plan, fetched alongside the queue and allowed to fail quietly.
+     *
+     * Opening the app off-schedule used to say only "Nothing to take right
+     * now". Somebody who cannot remember whether they took the morning tablet
+     * is exactly who this product is for, and their own phone could not say.
+     */
+    fun loadDay() {
+        viewModelScope.launch {
+            runCatching { ApiClient.api.myToday() }
+                .onSuccess { day -> _state.update { it.copy(day = day) } }
+            // On failure the screen simply stays as it was. This is context,
+            // not the reminder.
+        }
+    }
+
     fun load(eventId: String?) {
         lastEventId = eventId
+        loadDay()
 
         viewModelScope.launch {
             _state.update { it.copy(loading = true, notice = null, failed = false) }
