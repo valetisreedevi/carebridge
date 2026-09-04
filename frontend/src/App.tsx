@@ -20,6 +20,7 @@ import {
 import AuthAction from "./pages/AuthAction";
 import Dashboard from "./pages/Dashboard";
 import ElderView from "./pages/ElderView";
+import Landing from "./pages/Landing";
 import SignIn from "./pages/SignIn";
 
 /** Something to call them that is not their email address.
@@ -106,9 +107,42 @@ function Nav({ user }: { user: User | null }) {
   // sign in. Navigation would only offer them doors they cannot open.
   if (pathname === "/auth/action") return null;
 
+  // The landing page carries its own header and its own call to action.
+  if (!user && pathname === "/") return null;
+  if (pathname === "/signin") return null;
+
   return (
     <nav className="nav">
-      <span className="nav__brand">CareBridge</span>
+      {/* The mark lived only in the browser tab until now. A wordmark with
+          nothing beside it reads as a heading, not as a product. */}
+      <span className="nav__brand">
+        <svg className="mark" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="19" cy="19" r="8" fill="currentColor" />
+            <path
+              d="M10 49V37a9.5 9.5 0 0 1 9.5-9.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M19 31c9 0 17 3 22 8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+            />
+            <circle cx="44" cy="26" r="6.5" fill="currentColor" />
+            <path
+              d="M36 49v-7a8 8 0 0 1 16 0v7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
+          </svg>
+        CareBridge
+      </span>
       <Link className={pathname === "/" ? "nav__on" : ""} to="/">
         Family
       </Link>
@@ -164,8 +198,11 @@ export default function App() {
 
   // The elder screen is reached by a paired device, not by a signed-in
   // caregiver, so it stays outside the sign-in gate.
+  // A stranger opening the bare URL used to get a sign-in form and no idea
+  // what they were signing in to. They get the product's argument instead, one
+  // click from the form.
   const caregiverArea =
-    firebaseConfigured && !user ? <SignIn /> : <Dashboard />;
+    firebaseConfigured && !user ? <Landing /> : <Dashboard />;
 
   return (
     <BrowserRouter>
@@ -173,6 +210,7 @@ export default function App() {
       {user && !emailIsVerified(user) && <VerifyBanner user={user} />}
       <Routes>
         <Route path="/" element={caregiverArea} />
+        <Route path="/signin" element={<SignIn />} />
         <Route path="/elder" element={<ElderView />} />
         {/* Outside the sign-in gate: someone resetting a password cannot
             sign in, which is the whole reason they are here. */}

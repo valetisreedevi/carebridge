@@ -1,10 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <title>CareBridge</title>
-  <!-- Two people and the span between them. Legible at 16px, which rules out
-       anything with a pill, a clock or a heart in it. -->
+  <!-- Two people, and an arm reaching across to rest on her shoulder. The
+       span in CareBridge is that arm: the bridge is the relationship, not
+       infrastructure.
+
+       Literal bridges were drawn and all of them said something else. An arch
+       over two dots is HEADPHONES. A deck with the people standing on it is a
+       FROWN. Two dots above any curve is a SMILEY FACE - drawn three separate
+       ways, failed all three. A heartbeat span, a chain link, and two halves of
+       a circle (a loading spinner) were also tried. None of these are visible
+       in the source; they only appear when the mark is rendered at 16-40px on a
+       plate. Do that before replacing this. -->
   <rect width="64" height="64" rx="15" fill="#0f6b5c"/>
-  <path d="M13 41c0-13 8.5-20 19-20s19 7 19 20"
-        fill="none" stroke="#faf7f2" stroke-width="5.5" stroke-linecap="round"/>
-  <circle cx="13" cy="43" r="6" fill="#faf7f2"/>
-  <circle cx="51" cy="43" r="6" fill="#faf7f2"/>
+  <circle cx="19" cy="19" r="8" fill="#faf7f2"/>
+  <path d="M10 49V37a9.5 9.5 0 0 1 9.5-9.5" fill="none" stroke="#faf7f2" stroke-width="6" stroke-linecap="round"/>
+  <path d="M19 31c9 0 17 3 22 8" fill="none" stroke="#faf7f2" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="44" cy="26" r="6.5" fill="#faf7f2"/>
+  <path d="M36 49v-7a8 8 0 0 1 16 0v7" fill="none" stroke="#faf7f2" stroke-width="6" stroke-linecap="round"/>
 </svg>

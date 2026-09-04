@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   pairElder,
@@ -19,6 +19,46 @@ import MedicationForm from "../components/MedicationForm";
 import { clockTime, sinceWhen, timeIn } from "../format";
 
 const POLL_MS = 10000;
+
+/** Counts from zero to `value` once, then tracks it.
+ *
+ *  The three figures are the product's argument, and an argument that animates
+ *  into place is read; one that is simply present is skipped. Deliberately
+ *  short — this is a dashboard somebody checks between other things, not a
+ *  title sequence — and it holds still for anyone who has asked their system
+ *  not to animate.
+ */
+function useCountUp(value: number, ms = 650): number {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+
+  useEffect(() => {
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still || value === from.current) {
+      from.current = value;
+      setShown(value);
+      return;
+    }
+
+    const start = performance.now();
+    const origin = from.current;
+    from.current = value;
+    let frame = 0;
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      // Ease out: the numbers slow as they land rather than stopping dead.
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(Math.round(origin + (value - origin) * eased));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value, ms]);
+
+  return shown;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   TAKEN: "Taken",
@@ -345,6 +385,9 @@ function verdict(items: DayItem[]): { text: string; alert: boolean } {
  */
 function Progress({ ledger }: { ledger: Ledger }) {
   const { scheduled, asked, taken, unreachable, taken_on_trust } = ledger;
+  const shownTaken = useCountUp(taken);
+  const shownAsked = useCountUp(asked);
+  const shownScheduled = useCountUp(scheduled);
   if (!scheduled) return null;
 
   const pct = (n: number) => `${(n / scheduled) * 100}%`;
@@ -357,7 +400,25 @@ function Progress({ ledger }: { ledger: Ledger }) {
   const answered = Math.min(taken, asked);
 
   return (
-    <div className="progress">
+    <section className="ledger">
+      {/* The three numbers first, because they are the argument. Every other
+          product in this category shows one — doses taken out of doses
+          scheduled — and that one number blames her for a phone nobody set up. */}
+      <dl className="ledger__figures">
+        <div className="ledger__figure ledger__figure--taken">
+          <dd>{shownTaken}</dd>
+          <dt>Taken</dt>
+        </div>
+        <div className="ledger__figure ledger__figure--asked">
+          <dd>{shownAsked}</dd>
+          <dt>Asked</dt>
+        </div>
+        <div className="ledger__figure">
+          <dd>{shownScheduled}</dd>
+          <dt>Scheduled</dt>
+        </div>
+      </dl>
+
       <div
         className="progress__bar"
         role="img"
@@ -371,16 +432,30 @@ function Progress({ ledger }: { ledger: Ledger }) {
         <span className="progress__unreached" style={{ width: pct(unreachable) }} />
       </div>
 
-      <p className="progress__counts">
-        <strong>{taken}</strong> taken · <strong>{asked}</strong> asked ·{" "}
-        <strong>{scheduled}</strong> scheduled
-      </p>
+      {/* Without a key the green is just a green bar. The legend is permanent
+          rather than a tooltip: this is the one thing on the page a family is
+          asked to trust, so it has to be readable without being hunted for. */}
+      <ul className="ledger__key">
+        <li>
+          <span className="ledger__swatch ledger__swatch--taken" />
+          She answered
+        </li>
+        <li>
+          <span className="ledger__swatch ledger__swatch--asked" />
+          Asked, waiting
+        </li>
+        <li>
+          <span className="ledger__swatch ledger__swatch--unreached" />
+          Never reached them
+        </li>
+      </ul>
 
       {/* The whole point of counting this way, said in words. The difference
           between the second number and the third is the difference between a
           person ignoring her tablets and a phone that never rang. */}
       {unreachable > 0 && (
         <p className="progress__gap">
+          <span className="ledger__ours">ours to fix</span>
           {unreachable === 1 ? "1 dose was" : `${unreachable} doses were`} never
           asked about — no reminder reached the phone.
         </p>
@@ -392,7 +467,7 @@ function Progress({ ledger }: { ledger: Ledger }) {
           your word rather than hers.
         </p>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -874,13 +949,15 @@ export default function Dashboard() {
 
   return (
     <div className="dash">
-      <header className="dash__header">
-        <h1>Today</h1>
+      {/* One panel rather than a heading followed by a card. The sentence a
+          worried family reads and the numbers that back it up are the same
+          thought, and splitting them made the page open on an announcement
+          with no evidence under it. */}
+      <header className="dash__hero">
+        <p className="dash__eyebrow">Today</p>
         <p className={`dash__verdict ${status.alert ? "dash__verdict--alert" : ""}`}>
           {status.text}
         </p>
-
-        {ledger && <Progress ledger={ledger} />}
 
         {/* Said before any dose is due, not after one has quietly failed.
             With no phone set up nothing can reach her, and every reminder is
@@ -891,6 +968,8 @@ export default function Dashboard() {
             Get a pairing code below and enter it on her phone.
           </p>
         )}
+
+        {ledger && <Progress ledger={ledger} />}
       </header>
 
       {error && (
@@ -986,6 +1065,7 @@ export default function Dashboard() {
           </nav>
 
           {tab === "today" && (
+          <div className="dash__grid">
           <section className="card">
             <div className="card__head">
               <h2>{elder.name}'s medications</h2>
@@ -1370,11 +1450,13 @@ export default function Dashboard() {
               </ul>
             )}
           </section>
+
+          <aside className="dash__aside">
+            {history.length > 0 && <History days={history} />}
+            {insight && <Insight insight={insight} />}
+          </aside>
+          </div>
           )}
-
-          {tab === "today" && history.length > 0 && <History days={history} />}
-
-          {tab === "today" && insight && <Insight insight={insight} />}
 
           {tab === "alerts" && (
           <section className="card">

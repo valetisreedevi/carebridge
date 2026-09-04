@@ -119,9 +119,35 @@ export default function AuthAction() {
   return (
     <main className="signin">
       <div className="signin__card">
+        {/* The same mark as the tab, the nav and the sign-in card. This page is
+            reached from an email by someone who often cannot get in, so it is
+            the worst possible place to show them a symbol they have not seen
+            before. */}
         <div className="signin__mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="28" height="28">
-            <path fill="currentColor" d="M10 3h4v5h5v4h-5v5h-4v-5H5V8h5V3z" />
+          <svg className="mark" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="19" cy="19" r="8" fill="currentColor" />
+            <path
+              d="M10 49V37a9.5 9.5 0 0 1 9.5-9.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M19 31c9 0 17 3 22 8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+            />
+            <circle cx="44" cy="26" r="6.5" fill="currentColor" />
+            <path
+              d="M36 49v-7a8 8 0 0 1 16 0v7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
 

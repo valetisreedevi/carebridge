@@ -16,6 +16,13 @@
  */
 
 :root {
+  color-scheme: light;
+
+  /* The waiting amber. --warn is a text colour and --warn-bg a wash; the
+     middle segment of the ledger needs a fill that survives being 18px of bar
+     next to a solid green, and neither of those does. */
+  --warn-mid: #e8a93c;
+
   /* Warm neutrals, not the cool blue-grey a dashboard reaches for by default.
      This is a product about somebody's mother, and a hospital palette says
      the opposite of what the thing is for. The hues are all pulled slightly
@@ -160,9 +167,28 @@ textarea:focus {
 }
 
 .nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.15rem;
   font-weight: 650;
   letter-spacing: -0.02em;
   margin-right: 0.25rem;
+  color: var(--ink);
+}
+
+/* The mark takes its colour from whatever it sits in, so the same SVG serves
+   the brand teal in the nav and the sign-in plate without a second file. */
+.nav__brand .mark {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--brand);
+  flex: 0 0 auto;
+}
+
+.signin__mark .mark {
+  width: 1.85rem;
+  height: 1.85rem;
 }
 
 .nav a {
@@ -206,10 +232,10 @@ textarea:focus {
   position: sticky;
   top: 0;
   z-index: 5;
-  display: flex;
+  display: inline-flex;
   gap: 0.25rem;
   margin-bottom: 1rem;
-  padding: 0.3rem;
+  padding: 0.28rem;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -217,7 +243,8 @@ textarea:focus {
 }
 
 .tabs__tab {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 6.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -274,11 +301,26 @@ textarea:focus {
 }
 
 /* The one line that answers "does anyone need me right now?" */
+/* The emotional headline of the page — "Amma has not confirmed Fever Tablet".
+   It used to sit below a larger <h1>Today</h1>, which is the least useful
+   sentence on the screen. */
 .dash__verdict {
-  margin: 0.4rem 0 0;
-  font-size: 1.05rem;
+  margin: 0.25rem 0 0;
+  font-family: var(--font-human);
+  font-size: clamp(1.6rem, 4.2vw, 2.35rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   color: var(--good);
-  font-weight: 550;
+  font-weight: 500;
+}
+
+.dash__eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
 }
 
 .dash__verdict--alert {
@@ -351,7 +393,7 @@ textarea:focus {
 
 .card__head h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.15rem;
   letter-spacing: 0.01em;
 }
 
@@ -470,17 +512,6 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
-
-.alerts__item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius-sm);
-  background: var(--bad-bg);
-  color: var(--bad);
-  font-size: 0.92rem;
 }
 
 .alerts__item--help_requested,
@@ -1203,28 +1234,6 @@ textarea:focus {
   margin-bottom: 1.25rem;
 }
 
-@media (max-width: 30rem) {
-  .schedule__row {
-    grid-template-columns: 3.2rem 1fr;
-    row-gap: 0.5rem;
-  }
-
-  .schedule__status,
-  .schedule__now {
-    grid-column: 2;
-    text-align: left;
-    justify-self: start;
-  }
-
-  .dash__addElder {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .dash__addElder input {
-    width: 100%;
-  }
-}
 
 /* ---------------- shared quiet controls ----------------
  * The dashboard grew several per-row actions. They must not compete with the
@@ -1389,6 +1398,32 @@ textarea:focus {
   }
 }
 
+/* Must stay AFTER the 46rem block. Both match below 30rem at equal
+   specificity, so source order decides — and with this query first the
+   46rem values silently won and every rule in here was dead. */
+@media (max-width: 30rem) {
+  .schedule__row {
+    grid-template-columns: 3.2rem 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .schedule__status,
+  .schedule__now {
+    grid-column: 2;
+    text-align: left;
+    justify-self: start;
+  }
+
+  .dash__addElder {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .dash__addElder input {
+    width: 100%;
+  }
+}
+
 /* One tablet at a time, but say how many are coming. Without this the elder
  * confirms one, another appears, and it feels like the screen is not listening.
  * Sized with the elder scale, not the dashboard's. */
@@ -1515,7 +1550,8 @@ textarea:focus {
 
 .progress__bar {
   display: flex;
-  height: 6px;
+  gap: 2px;
+  height: 18px;
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
@@ -1540,8 +1576,8 @@ textarea:focus {
 .progress__unreached {
   background: repeating-linear-gradient(
     45deg,
-    var(--line-strong) 0 3px,
-    var(--page) 3px 6px
+    var(--ink-soft) 0 2px,
+    var(--line-strong) 2px 8px
   );
 }
 
@@ -1557,17 +1593,24 @@ textarea:focus {
   color: var(--ink-soft);
 }
 
-.progress__missed {
-  color: var(--bad);
-  font-weight: 550;
-}
-
 /* The sentence that separates our failure from her behaviour. Deliberately
    not red: nothing here is her fault, and colouring it like a miss would undo
    the entire reason for counting this way. */
-.progress__gap,
+/* Our failure. Filled, badged, and in the warning colour, because a dose that
+   never reached her is the one thing on this card we are accountable for. */
+.progress__gap {
+  margin: 0.8rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
+/* A different kind of caveat entirely — not a failure, just a record of who
+   vouched for the dose. It stays a footnote. */
 .progress__trust {
-  margin: 0;
+  margin: 0.55rem 0 0;
   font-size: 0.82rem;
   color: var(--ink-soft);
   padding-left: 0.55rem;
@@ -1699,9 +1742,16 @@ textarea:focus {
   color: var(--ink);
 }
 
+/* .card__hint carries a -0.6rem top margin so it can tuck under a
+   .card__head. The Insight footer is not under a head, so it needs the margin
+   put back rather than inheriting a tuck it was never designed for. */
+.insight .card__hint {
+  margin-top: 0.4rem;
+}
+
 .insight__figures {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(5.4rem, 1fr));
   gap: 0.75rem;
   margin: 0 0 0.9rem;
 }
@@ -1959,4 +2009,1207 @@ textarea:focus {
 
 .finished .schedule__editor {
   flex: 1 1 100%;
+}
+
+
+/* ---------------- the ledger ---------------- */
+
+/* Three numbers and the gap between them. Taken, asked, scheduled — where the
+   distance from asked to scheduled is our failure to reach her, not her
+   failure to take a tablet. It used to be a 6px hairline under the heading
+   with two invisible segments and no key; it is the product's argument, so it
+   is now the first card on the page. */
+.ledger__figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 0 0.9rem;
+}
+
+.ledger__figure {
+  padding: 0 0.9rem;
+  border-left: 1px solid var(--line);
+}
+
+.ledger__figure:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.ledger__figure dd {
+  margin: 0;
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.ledger__figure dt {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* Only the first two carry colour. "Scheduled" is what the doctor said, not
+   something CareBridge achieved, so it stays in ink. */
+.ledger__figure--taken dd {
+  color: var(--good);
+}
+
+.ledger__figure--asked dd {
+  color: var(--warn);
+}
+
+.ledger__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.ledger__key li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ledger__swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.ledger__swatch--taken {
+  background: var(--good);
+}
+
+.ledger__swatch--asked {
+  background: var(--warn-mid);
+}
+
+.ledger__swatch--unreached {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ink-soft) 0 2px,
+    var(--line-strong) 2px 8px
+  );
+}
+
+/* The badge the alerts list already uses for the same idea, so a family learns
+   one mark rather than two. */
+.ledger__ours {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: lowercase;
+  vertical-align: 1px;
+}
+
+
+/* ---------------- the hero and the two-column day ---------------- */
+
+/* The page used to be one 60rem column of stacked cards: a lot of scrolling
+   past things to reach the thing, with half the screen empty beside it. The
+   day's medicines are what a caregiver operates; the week and the weekly note
+   are what they glance at. Those are different jobs and they belong side by
+   side, not one after the other. */
+.dash__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.dash__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  /* Clears the sticky tab bar above it. Sticking at 0 puts the week strip
+     behind the tabs, which is how you discover two stuck things fight. */
+  top: 4.75rem;
+}
+
+/* One column again well before the sidebar gets too narrow to read. */
+@media (max-width: 62rem) {
+  .dash__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dash__aside {
+    position: static;
+  }
+}
+
+/* The verdict and the numbers that justify it, on one ground. The tint is
+   brand at 4% — enough to lift the panel off the page, not enough to make a
+   medical dashboard look like a landing page. */
+.dash__hero {
+  position: relative;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 1.6rem 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--brand) 6%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--card);
+  box-shadow:
+    0 1px 2px rgba(31, 26, 23, 0.04),
+    0 18px 40px -32px rgba(31, 26, 23, 0.5);
+}
+
+.dash__hero .ledger {
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--line);
+}
+
+/* On a wide screen the figures sit beside the bar rather than above it, so the
+   hero stays one band instead of becoming a stack of its own. */
+@media (min-width: 48rem) {
+  .dash__hero .ledger {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 0 2rem;
+    align-items: center;
+  }
+
+  .ledger__figures {
+    margin-bottom: 0;
+  }
+
+  .ledger .progress__bar,
+  .ledger__key {
+    grid-column: 2;
+  }
+
+  .ledger .progress__bar {
+    align-self: end;
+  }
+
+  .ledger__key {
+    align-self: start;
+  }
+
+  .progress__gap,
+  .progress__trust {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The bar opens rather than appearing. Width is already transitioned; this is
+   the one-off arrival, and it is the difference between a page that loads and
+   a page that starts. */
+@keyframes ledgerOpen {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.ledger .progress__bar {
+  transform-origin: left center;
+  animation: ledgerOpen 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Cards gain a little material so they read as objects on a ground rather than
+   as boxes drawn on paper. */
+.card {
+  box-shadow:
+    0 1px 2px rgba(31, 26, 23, 0.03),
+    0 12px 28px -26px rgba(31, 26, 23, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger .progress__bar {
+    animation: none;
+  }
+}
+
+/* ---------------- the landing page ---------------- */
+
+/* What a stranger sees before they have an account. Warmer and more generous
+   than the dashboard on purpose: the dashboard is a tool somebody opens at 8am
+   to answer one question, while this is the only place the product gets to
+   explain itself. */
+.land {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+}
+
+.land__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 0 0;
+}
+
+.land__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.land__brand .mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--brand);
+}
+
+.land__brand--sm { font-size: 1rem; }
+
+.land__brand--sm .mark {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.land__eyebrow {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--brand);
+}
+
+/* --- hero --- */
+
+.land__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 3rem;
+  align-items: center;
+  padding: 3.5rem 0 4rem;
+}
+
+.land__hero h1 {
+  margin: 0 0 1.1rem;
+  font-family: var(--font-human);
+  /* Was 3.6rem, which pushed "up" onto a line of its own between the two
+     explicit breaks — an orphan in the largest type on the page. */
+  font-size: clamp(2.2rem, 4.6vw, 3.15rem);
+  text-wrap: balance;
+  line-height: 1.08;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.land__hero h1 em {
+  font-style: normal;
+  color: var(--brand);
+}
+
+.land__lede {
+  margin: 0 0 1.8rem;
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 32rem;
+}
+
+.land__cta {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.land__quiet {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+}
+
+/* --- the phone that wakes itself --- */
+
+/* A screenshot of a reminder is a picture of a locked screen. The thing worth
+   showing is the TRANSITION: a dark handset on a side table that lights itself
+   up without being touched. So it happens here, on a loop, before anyone has
+   read a word about the product. */
+.phone {
+  position: relative;
+  justify-self: center;
+  width: 15.5rem;
+}
+
+.phone__body {
+  position: relative;
+  z-index: 2;
+  border-radius: 2.4rem;
+  padding: 0.55rem;
+  background: #1f1a17;
+  box-shadow:
+    0 2px 4px rgba(31, 26, 23, 0.18),
+    0 40px 70px -40px rgba(31, 26, 23, 0.75);
+}
+
+.phone__screen {
+  border-radius: 2rem;
+  padding: 1.5rem 1.1rem 1.2rem;
+  min-height: 24rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: #15120f;
+  transition: background 420ms ease;
+}
+
+.phone--awake .phone__screen {
+  background: var(--page);
+}
+
+/* Everything on the screen arrives after the backlight, not with it. */
+.phone__screen > * {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 340ms ease, transform 340ms ease;
+}
+
+.phone--awake .phone__screen > * {
+  opacity: 1;
+  transform: none;
+}
+
+.phone--awake .phone__screen > :nth-child(2) { transition-delay: 60ms; }
+.phone--awake .phone__screen > :nth-child(3) { transition-delay: 110ms; }
+.phone--awake .phone__screen > :nth-child(4) { transition-delay: 150ms; }
+.phone--awake .phone__screen > :nth-child(5) { transition-delay: 200ms; }
+.phone--awake .phone__screen > :nth-child(6) { transition-delay: 260ms; }
+
+.phone__label {
+  margin: 0 0 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--brand);
+}
+
+.phone__pill {
+  position: relative;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 1.4rem;
+  background: var(--brand-soft);
+  border: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+.phone__pill::after {
+  content: "";
+  position: absolute;
+  inset: 34% 24%;
+  border-radius: 999px;
+  background: var(--brand);
+  opacity: 0.55;
+}
+
+.phone__name {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.phone__dose {
+  margin: 0.2rem 0 1rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.phone__voice {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-bottom: 1.2rem;
+  color: var(--brand);
+}
+
+.phone__voice em {
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* A family voice, as a shape. */
+.phone__wave {
+  width: 3px;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.phone--awake .phone__wave {
+  animation: voiceWave 900ms ease-in-out infinite;
+}
+
+.phone--awake .phone__wave:nth-child(2) { animation-delay: 120ms; }
+.phone--awake .phone__wave:nth-child(3) { animation-delay: 240ms; }
+.phone--awake .phone__wave:nth-child(4) { animation-delay: 360ms; }
+.phone--awake .phone__wave:nth-child(5) { animation-delay: 480ms; }
+
+@keyframes voiceWave {
+  0%, 100% { height: 0.4rem; }
+  50% { height: 1.35rem; }
+}
+
+.phone__btn {
+  margin-top: auto;
+  width: 100%;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  background: var(--good);
+  color: #fff;
+  font-weight: 650;
+}
+
+/* The buzz. Two rings so it reads as a pulse rather than a single ping. */
+.phone__ring {
+  position: absolute;
+  inset: 12% -8%;
+  border-radius: 3rem;
+  border: 2px solid var(--brand);
+  opacity: 0;
+  z-index: 1;
+}
+
+.phone--awake .phone__ring {
+  animation: buzz 2.4s ease-out 1;
+}
+
+.phone--awake .phone__ring--late {
+  animation-delay: 320ms;
+}
+
+@keyframes buzz {
+  0% { transform: scale(0.92); opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+
+/* --- the story --- */
+
+.land__story {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 0;
+  text-align: center;
+  font-family: var(--font-human);
+  font-size: 1.5rem;
+  line-height: 1.5;
+}
+
+.land__story p { margin: 0 0 1rem; }
+
+.land__strike { color: var(--ink-soft); }
+
+/* --- how it works --- */
+
+.land__steps ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 2rem 0 3.5rem;
+}
+
+.land__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 700;
+  margin-bottom: 0.8rem;
+}
+
+.land__steps h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+
+.land__steps p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+/* --- the argument --- */
+
+.land__honest {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+  padding: 3rem 2.2rem;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(
+      100% 130% at 100% 0%,
+      color-mix(in srgb, var(--brand) 7%, transparent) 0%,
+      transparent 62%
+    ),
+    var(--card);
+  border: 1px solid var(--line);
+}
+
+.land__honest h2 {
+  margin: 0 0 1rem;
+  font-family: var(--font-human);
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+.land__honest p {
+  margin: 0 0 0.9rem;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+.land__ledger {
+  padding: 1.4rem 1.5rem;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px -34px rgba(31, 26, 23, 0.6);
+}
+
+/* --- the rest --- */
+
+.land__more {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.75rem 2.5rem;
+  padding: 3.5rem 0;
+}
+
+.land__more h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.land__more p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.land__end {
+  text-align: center;
+  padding: 2rem 0 3.5rem;
+}
+
+.land__end h2 {
+  margin: 0 0 1.5rem;
+  font-family: var(--font-human);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  font-weight: 500;
+}
+
+.land__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 56rem) {
+  .land__hero,
+  .land__honest {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .land__hero { padding-top: 2.5rem; }
+  .phone { margin-top: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone--awake .phone__ring,
+  .phone--awake .phone__wave {
+    animation: none;
+  }
+}
+
+/* A call to action that navigates is an anchor, not a button — but .btn-primary
+   only ever carried colour, because every other user of it was a real <button>
+   picking its shape up from the element rule. On the landing page the two
+   calls to action rendered as underlined links inside coloured boxes. */
+a.btn-primary,
+a.btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.72rem 1.25rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+a.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+a.btn-primary:hover {
+  background: var(--brand-ink);
+  border-color: var(--brand-ink);
+  color: #fff;
+}
+
+a.btn-primary--sm {
+  padding: 0.45rem 0.95rem;
+  font-size: 0.9rem;
+}
+
+/* The hero action earns a little more presence than a dashboard control. */
+.land__cta .btn-primary {
+  padding: 0.9rem 1.7rem;
+  font-size: 1.05rem;
+  border-radius: 0.85rem;
+  box-shadow: 0 12px 26px -16px rgba(15, 107, 92, 0.8);
+}
+
+.land__end .btn-primary {
+  padding: 0.95rem 2rem;
+  font-size: 1.1rem;
+  border-radius: 0.9rem;
+}
+
+/* ---------------- features that demonstrate themselves ---------------- */
+
+/* This section used to be four headings and four paragraphs in a grid: a list
+   of claims. Each card now carries a real fragment of the product instead —
+   the actual course chip, the actual dose counter, the real Telugu the elder
+   screen renders — because a page that illustrates its claims with drawings is
+   asking to be taken on trust. */
+.land__features {
+  padding: 4rem 0 1rem;
+}
+
+.land__features h2 {
+  margin: 0 0 2.25rem;
+  font-family: var(--font-human);
+  font-size: clamp(1.7rem, 3.6vw, 2.4rem);
+  font-weight: 500;
+  line-height: 1.2;
+  max-width: 26ch;
+}
+
+.feats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feat {
+  padding: 1.4rem 1.4rem 1.5rem;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(31, 26, 23, 0.03);
+  /* Arrives as you reach it rather than sitting there already. */
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 520ms ease,
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+.feat--in {
+  opacity: 1;
+  transform: none;
+}
+
+.feat:hover {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  box-shadow:
+    0 1px 2px rgba(31, 26, 23, 0.04),
+    0 20px 40px -30px rgba(31, 26, 23, 0.6);
+}
+
+.feat h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.feat p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+/* The live fragment at the top of each card. A fixed height so six cards of
+   different content still line their headings up. */
+.feat__demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 4.5rem;
+  margin-bottom: 1.1rem;
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  border: 1px solid var(--line);
+}
+
+.demo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.demo--voice {
+  gap: 0.22rem;
+  color: var(--brand);
+  height: 1.6rem;
+}
+
+/* The waveform only moves while the card is under the pointer — six looping
+   animations on one screen is a fidget toy, not a product page. */
+.feat:hover .demo--voice .phone__wave {
+  animation: voiceWave 900ms ease-in-out infinite;
+}
+
+.feat:hover .demo--voice .phone__wave:nth-child(2) { animation-delay: 120ms; }
+.feat:hover .demo--voice .phone__wave:nth-child(3) { animation-delay: 240ms; }
+.feat:hover .demo--voice .phone__wave:nth-child(4) { animation-delay: 360ms; }
+.feat:hover .demo--voice .phone__wave:nth-child(5) { animation-delay: 480ms; }
+
+.demo--telugu {
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: center;
+}
+
+.demo--telugu strong {
+  font-size: 1.05rem;
+}
+
+.demo--telugu span {
+  font-size: 1.25rem;
+  color: var(--brand);
+}
+
+.demo--count em {
+  font-style: normal;
+  font-size: 1.25rem;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.demo__dots {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.demo__dots i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.demo__dots i.on {
+  background: var(--brand);
+}
+
+.demo--lock .demo__screen {
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.65rem;
+  background: #1f1a17;
+  color: var(--brand-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.demo--alert {
+  color: var(--warn);
+  font-size: 0.82rem;
+  padding: 0 0.9rem;
+  text-align: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feat {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .feat:hover .demo--voice .phone__wave {
+    animation: none;
+  }
+}
+
+/* ---------------- the two surfaces ---------------- */
+
+/* Her screen and yours, side by side, with the span between them. This is the
+   product in one picture: a phone at a side table in Hyderabad and a dashboard
+   wherever the family happens to be.
+
+   Both panels are built from the app's OWN class names — .elder__medicine,
+   .schedule__row, .ledger — so what a visitor is looking at is the real thing
+   at a smaller scale, not a drawing of it. The elder side is deliberately left
+   enormous: shrinking it to fit a marketing layout would misrepresent the one
+   design decision the product is most sure about. */
+.show {
+  padding: 4.5rem 0 1rem;
+}
+
+.show h2 {
+  margin: 0 0 2.5rem;
+  font-family: var(--font-human);
+  font-size: clamp(1.7rem, 3.6vw, 2.4rem);
+  font-weight: 500;
+}
+
+.show__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) auto minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.show__side {
+  margin: 0;
+}
+
+.show__side figcaption {
+  margin-top: 1rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.show__side figcaption strong {
+  color: var(--ink);
+}
+
+/* --- her phone --- */
+
+.show__phone {
+  border-radius: 2.2rem;
+  padding: 0.5rem;
+  background: #1f1a17;
+  box-shadow:
+    0 2px 4px rgba(31, 26, 23, 0.18),
+    0 44px 70px -44px rgba(31, 26, 23, 0.8);
+}
+
+.show__elder {
+  border-radius: 1.85rem;
+  background: var(--page);
+  padding: 1.5rem 1.2rem 1.3rem;
+  text-align: center;
+  /* The elder screen is built for 30rem of phone. Scaling the type down would
+     be dishonest, so the whole panel is scaled instead and the proportions
+     survive intact. */
+  font-size: 0.62rem;
+}
+
+.show__elder .elder__title {
+  margin: 0 0 0.9rem;
+  font-size: 2.1rem;
+}
+
+.show__photo {
+  width: 9.5rem;
+  height: 9.5rem;
+  margin: 0 auto 1.1rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 50% 45%, var(--brand-soft) 0 38%, transparent 39%),
+    var(--card);
+  box-shadow: 0 14px 28px -22px rgba(31, 26, 23, 0.7);
+}
+
+.show__elder .elder__medicine {
+  margin: 0;
+  font-size: 2.3rem;
+}
+
+.show__elder .elder__dose {
+  margin: 0.25rem 0 0;
+  font-size: 1.55rem;
+}
+
+.show__elder .elder__food {
+  margin: 0.15rem 0 1rem;
+  font-size: 1.2rem;
+}
+
+.show__elder .elder__voice {
+  font-size: 1.05rem;
+  padding: 0.7rem 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.show__elder .elder__button {
+  font-size: 1.35rem;
+  padding: 1.05rem;
+  margin-bottom: 0.6rem;
+}
+
+/* --- the span between them --- */
+
+.show__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.show__link span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--brand);
+  opacity: 0.28;
+  animation: linkPulse 2.4s ease-in-out infinite;
+}
+
+.show__link span:nth-child(2) { animation-delay: 300ms; }
+.show__link span:nth-child(3) { animation-delay: 600ms; }
+
+@keyframes linkPulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.85); }
+  50% { opacity: 0.9; transform: scale(1.15); }
+}
+
+/* --- the dashboard --- */
+
+.show__dash {
+  padding: 1.5rem 1.6rem 1.4rem;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--brand) 6%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--card);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 1px 2px rgba(31, 26, 23, 0.04),
+    0 30px 60px -46px rgba(31, 26, 23, 0.7);
+}
+
+.show__dash .dash__verdict {
+  font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+  margin-bottom: 0.2rem;
+}
+
+.show__dash .ledger {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.show__rows {
+  margin-top: 1.25rem;
+}
+
+.show__rows .schedule__row {
+  cursor: default;
+}
+
+@media (max-width: 62rem) {
+  .show__pair {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+  }
+
+  .show__side {
+    max-width: 22rem;
+    margin: 0 auto;
+  }
+
+  .show__side--wide {
+    max-width: none;
+  }
+
+  /* The span turns on its side when the two panels stack. */
+  .show__link {
+    flex-direction: row;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .show__link span {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
+/* The course chip is a label, not a band. Inside .schedule__what — a flex
+   column — an inline-block stretches to the column width and reads as a
+   progress bar that is always full. */
+.schedule__what .course {
+  align-self: flex-start;
+  margin-left: 0;
+  margin-top: 0.15rem;
+}
+
+/* ---------------- the page unfolds ---------------- */
+
+/* The landing page read as a document: everything present at once, nothing
+   responding to the reader. Each block now arrives as it is reached, which is
+   the difference between a page that has been printed and one that is running.
+   Every rule here is disabled under prefers-reduced-motion. */
+.rise {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 620ms ease,
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rise--in {
+  opacity: 1;
+  transform: none;
+}
+
+/* A slow wash of brand colour behind the hero, so the top of the page is never
+   completely still. Two blooms at different speeds and opposite directions —
+   one drifting is a gradient, two is weather. */
+.land__hero::before,
+.land__hero::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.land__hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.land__hero::before {
+  width: 32rem;
+  height: 32rem;
+  top: -12rem;
+  left: -14rem;
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  opacity: 0.5;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+
+.land__hero::after {
+  width: 26rem;
+  height: 26rem;
+  bottom: -10rem;
+  right: -8rem;
+  background: color-mix(in srgb, var(--warn-mid) 14%, transparent);
+  opacity: 0.4;
+  animation: drift 28s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(3rem, 2rem, 0) scale(1.12); }
+}
+
+/* The phone lifts slightly as the pointer comes near the hero, which is enough
+   to make the page feel like it is paying attention. */
+.land__hero:hover .phone__body {
+  transform: translateY(-6px);
+}
+
+.phone__body {
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The two panels in the showcase settle at slightly different moments. */
+.show__side {
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.show__side:hover {
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .land__hero::before,
+  .land__hero::after {
+    animation: none;
+  }
+
+  .land__hero:hover .phone__body,
+  .show__side:hover {
+    transform: none;
+  }
+}
+
+/* The hero blooms sit outside the column on purpose, which made the whole page
+   scroll sideways. Clipping here rather than shrinking them: the glow needs to
+   run off the edge to read as light rather than as a circle. */
+.land {
+  overflow-x: clip;
+}
+
+/* Belt and braces — `clip` is not universal, and a sideways scrollbar on a
+   landing page is the sort of thing nobody notices until a judge does. */
+html,
+body {
+  overflow-x: hidden;
 }

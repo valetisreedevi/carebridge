@@ -10,9 +10,19 @@
          the one sitting on a side table, not the caregiver's, who uses a
          browser. Installed it runs standalone, with no address bar for
          somebody to lose the page behind. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0f6b5c" />
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- The submission gets shared as a bare link. Without these it unfurls as
+         a naked URL, which reads as unfinished whatever the product does. -->
+    <meta name="description" content="Medicine reminders in your family's own voice. CareBridge reminds an elder to take her medicines and tells the family honestly what happened." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="CareBridge" />
+    <meta property="og:description" content="Medicine reminders in your family's own voice." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
 
     <!-- Newsreader carries the human half, Figtree the operational half, and
          Noto Sans Telugu is not optional: without it a Telugu screen falls
