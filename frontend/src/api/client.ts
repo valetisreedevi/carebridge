@@ -194,6 +194,10 @@ export type Medication = {
   active: boolean;
   photo_object_name?: string;
   caregiver_audio_object_name?: string;
+  /** How long the doctor prescribed for. Absent or 0 means open-ended. */
+  duration_days?: number | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
 };
 
 export type DayItem = {
@@ -217,6 +221,14 @@ export type DayItem = {
   last_unclear: string | null;
   confirmed_at: string | null;
   acknowledged_at: string | null;
+  /** Where this dose falls in a prescribed course, or null for an open-ended
+   *  medicine. Counted in days, because days are what the doctor said. */
+  course: {
+    day: number;
+    of: number;
+    ends_on: string;
+    finished: boolean;
+  } | null;
 };
 
 /** Doses counted along both axes: what we managed to ask about, and what she

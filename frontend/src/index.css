@@ -1728,3 +1728,106 @@ textarea:focus {
 .schedule__unclear {
   color: var(--warn);
 }
+
+/* The doses of one medicine through a day. A repeated row rather than one
+   field, because a tablet taken morning and night is the ordinary case and
+   the form used to be able to hold only the first of them. */
+.medform__times {
+  margin: 0.9rem 0 0;
+  padding: 0.85rem 0.9rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.medform__times legend {
+  padding: 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: var(--ink-soft);
+}
+
+.medform__timeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.medform__timeRow input[type="time"] {
+  flex: 0 0 auto;
+}
+
+/* The clock reading sits beside its field, so it never reads as a hint that
+   belongs to the row below. */
+.medform__timeRow .medform__hint {
+  margin-top: 0;
+  flex: 1 1 auto;
+}
+
+.medform__fallback {
+  margin: 0.9rem 0 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+/* The summary states both values, so the two settings can be checked without
+   opening anything — collapsed is the state almost everyone leaves it in. */
+.medform__fallback summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+
+.medform__fallback .medform__grid {
+  margin-top: 0.8rem;
+}
+
+/* Where a medicine has got to in the course the doctor prescribed. Sits with
+   the medicine name rather than the status, because it describes the
+   prescription and not what happened this morning. */
+.course {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.72rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.course--last {
+  background: var(--good-bg, var(--warn-bg));
+  color: var(--good, var(--warn));
+}
+
+/* A course that has ended stops producing rows, so without this the medicine
+   would just disappear off the day with no account of itself. */
+.finished {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.finished li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.finished li > span {
+  flex: 1 1 auto;
+}
+
+.finished .schedule__editor {
+  flex: 1 1 100%;
+}

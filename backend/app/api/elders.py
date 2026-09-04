@@ -16,6 +16,7 @@ from app.api.auth import (
     revoke_elder_sessions,
 )
 from app.api import deps
+from app.services import course
 from app.api.schemas import (
     CreateElderRequest,
     RegisterCaregiverTokenRequest,
@@ -323,8 +324,11 @@ def get_today(
         medication = medications.get(event["medication_id"], {})
 
         # A removed medication leaves today's events behind. Showing them is
-        # what made Remove look like it had done nothing at all.
+        # what made Remove look like it had done nothing at all. A course that
+        # has since been shortened leaves them behind in exactly the same way.
         if not medication or not medication.get("active", True):
+            continue
+        if not course.runs_on(medication, local_now.date()):
             continue
 
         items.append({
@@ -354,12 +358,15 @@ def get_today(
             "acknowledged_at": event.get("acknowledged_at"),
             "escalated_at": event.get("escalated_at"),
             "next_attempt_at": event.get("next_attempt_at"),
+            "course": course.progress(medication, local_now.date()),
         })
 
     # Times that have not been materialised into events yet still belong on the
     # dashboard, otherwise the day looks empty until the first reminder fires.
     materialised = {(e["medication_id"], e["local_time"]) for e in items}
     for medication in firestore.list_medications_for_elder(elder_id):
+        if not course.runs_on(medication, local_now.date()):
+            continue
         for value in medication.get("schedule_times", []):
             if (medication["id"], value) in materialised:
                 continue
@@ -385,6 +392,7 @@ def get_today(
                 "acknowledged_at": None,
                 "escalated_at": None,
                 "next_attempt_at": None,
+                "course": course.progress(medication, local_now.date()),
             })
 
     return {

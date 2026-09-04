@@ -97,6 +97,52 @@ function needsAttention(item: DayItem): boolean {
   );
 }
 
+/** The elder's own today, as YYYY-MM-DD. en-CA is the shortest way to get
+ *  an ISO date out of Intl, and the course dates are stored in that shape. */
+function todayIn(zone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat("en-CA").format(new Date());
+  }
+}
+
+function yesterdayIn(zone: string): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA").format(d);
+  }
+}
+
+function shortDate(iso: string): string {
+  // Midday, so no timezone can drag the label onto the day before.
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/** Where this medicine has got to in the course the doctor prescribed.
+ *
+ *  Shown once per medicine rather than on every row: a tablet taken three
+ *  times a day is three rows, and "Day 4 of 15" repeated down all of them is
+ *  noise pretending to be information.
+ */
+function CourseChip({ course }: { course: NonNullable<DayItem["course"]> }) {
+  const lastDay = course.day >= course.of;
+
+  return (
+    <span className={`course ${lastDay ? "course--last" : ""}`}>
+      {lastDay
+        ? "Last day · ends today"
+        : `Day ${course.day} of ${course.of} · ends ${shortDate(course.ends_on)}`}
+    </span>
+  );
+}
+
 /** Rows are keyed by medicine and time; one medicine can appear twice a day. */
 function rowKey(item: DayItem): string {
   return `${item.medication_id}-${item.local_time}`;
@@ -686,6 +732,20 @@ export default function Dashboard() {
   const elder = elders.find((e) => e.id === selected);
   const status = verdict(items);
 
+  // One chip per medicine, on whichever of its rows comes first.
+  const chipRow = new Map<string, string>();
+  for (const item of items) {
+    if (!chipRow.has(item.medication_id)) chipRow.set(item.medication_id, rowKey(item));
+  }
+
+  // A finished course has no rows left — its doses stopped being generated —
+  // so without this the medicine simply vanishes from the day with no word
+  // about where it went.
+  const elderToday = elder ? todayIn(elder.timezone) : "";
+  const finished = elder
+    ? medications.filter((m) => m.ends_on && m.ends_on < elderToday)
+    : [];
+
   return (
     <div className="dash">
       <header className="dash__header">
@@ -915,6 +975,52 @@ export default function Dashboard() {
               />
             )}
 
+            {finished.length > 0 && (
+              <ul className="finished">
+                {finished.map((m) => (
+                  <li key={m.id}>
+                    <span>
+                      <strong>{m.name}</strong> finished{" "}
+                      {m.ends_on === yesterdayIn(elder.timezone)
+                        ? "yesterday"
+                        : `on ${shortDate(m.ends_on as string)}`}
+                      .
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-quiet"
+                      onClick={() => setEditing(editing === m.id ? null : m.id)}
+                    >
+                      Extend
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-quiet btn-quiet--danger"
+                      onClick={() => removeMedication(m.id)}
+                    >
+                      Remove
+                    </button>
+
+                    {editing === m.id && (
+                      <div className="schedule__editor">
+                        <MedicationForm
+                          elderId={elder.id}
+                          elderName={elder.name}
+                          elderTimezone={elder.timezone}
+                          existing={m}
+                          onCancel={() => setEditing(null)}
+                          onSaved={() => {
+                            setEditing(null);
+                            loadDay();
+                          }}
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {items.length === 0 && !adding ? (
               <p className="empty">
                 Nothing scheduled yet. Add a medication and CareBridge will take
@@ -935,6 +1041,9 @@ export default function Dashboard() {
 
                     <span className="schedule__what">
                       <strong>{item.medication_name}</strong>
+                      {item.course && chipRow.get(item.medication_id) === rowKey(item) && (
+                        <CourseChip course={item.course} />
+                      )}
                       <small>
                         {item.dose}
                         {item.food_instruction

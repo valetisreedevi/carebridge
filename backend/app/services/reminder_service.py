@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.config import get_settings
 from app.models.medication_event import MedicationEventStatus
 from app.services.firestore_service import FirestoreService, get_db
+from app.services import course
 from app.services.medication_event_service import (
     MedicationEventService,
     event_document_id,
@@ -122,6 +123,12 @@ class ReminderService:
         """Scheduled times expressed in the elder's local day, as UTC instants."""
         tz = _zone(elder.get("timezone"))
         local_now = now.astimezone(tz)
+
+        # A course that has ended, or has not begun, produces no doses. Asked
+        # in her timezone: the last day of a Kolkata course is over in Kolkata,
+        # whatever the date is on the machine running this.
+        if not course.runs_on(medication, local_now.date()):
+            return []
 
         times = medication.get("schedule_times")
         if not times:

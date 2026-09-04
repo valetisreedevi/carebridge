@@ -14,6 +14,78 @@ const FOOD_OPTIONS = [
   { value: "ANY_TIME", label: "Any time" },
 ];
 
+/** The API takes up to six; more than that is not a prescription any more. */
+const MAX_TIMES = 6;
+
+const TIMES_PER_DAY = [
+  { count: 1, label: "Once a day" },
+  { count: 2, label: "Twice a day" },
+  { count: 3, label: "Three times a day" },
+  { count: 4, label: "Four times a day" },
+];
+
+/** How long a doctor prescribes for, in the words they use.
+ *
+ *  Zero is "ongoing", and it has to be a real value rather than an absence:
+ *  moving a medicine back off a course is an edit like any other, and an
+ *  absent field cannot express it.
+ */
+const DURATION_OPTIONS = [
+  { days: 0, label: "Ongoing — until I stop it" },
+  { days: 5, label: "5 days" },
+  { days: 7, label: "7 days" },
+  { days: 10, label: "10 days" },
+  { days: 15, label: "15 days" },
+  { days: 30, label: "1 month" },
+  { days: 60, label: "2 months" },
+  { days: 90, label: "3 months" },
+];
+
+/** Where a day's doses fall when nobody has said otherwise.
+ *
+ *  A caregiver holding a prescription slip knows how many times a day, not
+ *  which hours — the hours are ours to suggest and theirs to correct.
+ */
+const DEFAULT_TIMES: Record<number, string[]> = {
+  1: ["08:00"],
+  2: ["08:00", "20:00"],
+  3: ["08:00", "14:00", "20:00"],
+  4: ["08:00", "13:00", "17:00", "21:00"],
+};
+
+function shiftBy(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = (h * 60 + m + minutes + 1440) % 1440;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+}
+
+function defaultTimes(count: number, food: string): string[] {
+  // A once-daily tablet taken after food is almost always the evening one.
+  if (count === 1 && food === "AFTER_FOOD") return ["20:00"];
+
+  const base = DEFAULT_TIMES[count] ?? DEFAULT_TIMES[1];
+  // Otherwise "after food" would land at exactly the hour of the meal.
+  return food === "AFTER_FOOD" ? base.map((t) => shiftBy(t, 30)) : base;
+}
+
+/** Morning-afternoon-night, the way the prescription itself is written.
+ *
+ *  Indian slips say 1-0-1 and doctors say BD; a caregiver copying one across
+ *  should be able to see their own notation echoed back rather than having to
+ *  trust that four clock fields mean the same thing.
+ */
+function slipNotation(times: string[]): string {
+  const slots = [0, 0, 0];
+  for (const t of times) {
+    const hour = Number(t.split(":")[0]);
+    if (hour < 12) slots[0] += 1;
+    else if (hour < 17) slots[1] += 1;
+    else slots[2] += 1;
+  }
+  return slots.join("-");
+}
+
 type Props = {
   elderId: string;
   elderName: string;
@@ -36,7 +108,13 @@ export default function MedicationForm({
   const [name, setName] = useState(existing?.name ?? "");
   const [dose, setDose] = useState(existing?.dose ?? "");
   const [food, setFood] = useState(existing?.food_instruction ?? "BEFORE_FOOD");
-  const [time, setTime] = useState(existing?.schedule_times?.[0] ?? "08:00");
+  // Every time, not just the first. Reading only [0] here and writing back a
+  // one-element array is how editing the dose of a twice-daily medicine used
+  // to delete its second dose.
+  const [times, setTimes] = useState<string[]>(
+    existing?.schedule_times?.length ? [...existing.schedule_times] : ["08:00"],
+  );
+  const [durationDays, setDurationDays] = useState(existing?.duration_days ?? 0);
   const [retry, setRetry] = useState(existing?.retry_after_minutes ?? 10);
   const [attempts, setAttempts] = useState(existing?.max_attempts ?? 2);
   const [photo, setPhoto] = useState<File | null>(null);
@@ -53,6 +131,24 @@ export default function MedicationForm({
   const here = timeIn(elderTimezone);
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const elsewhere = Boolean(elderTimezone) && elderTimezone !== mine;
+
+  const setTimeAt = (index: number, value: string) =>
+    setTimes((current) => current.map((t, i) => (i === index ? value : t)));
+
+  const removeTimeAt = (index: number) =>
+    setTimes((current) => current.filter((_, i) => i !== index));
+
+  const changeFood = (next: string) => {
+    setFood(next);
+    // Only re-suggest while the caregiver is still on our suggestions. Once
+    // they have typed their own hours, changing the food rule must not throw
+    // those away.
+    setTimes((current) => {
+      const suggested = defaultTimes(current.length, food);
+      const untouched = current.every((t, i) => t === suggested[i]);
+      return untouched ? defaultTimes(current.length, next) : current;
+    });
+  };
 
   const toggleRecording = async () => {
     if (listening) {
@@ -91,9 +187,10 @@ export default function MedicationForm({
       name: name.trim(),
       dose: dose.trim(),
       food_instruction: food,
-      schedule_times: [time],
+      schedule_times: [...new Set(times)].sort(),
       retry_after_minutes: retry,
       max_attempts: attempts,
+      duration_days: durationDays,
     };
 
     try {
@@ -121,13 +218,13 @@ export default function MedicationForm({
     }
   };
 
-  /** Folds this time into the medicine that already exists. */
+  /** Folds these times into the medicine that already exists. */
   const addTimeToExisting = async () => {
     if (!clash) return;
     setSaving(true);
     try {
       await api.updateMedication(clash.existing_id, {
-        schedule_times: [...new Set([...clash.existing_times, time])],
+        schedule_times: [...new Set([...clash.existing_times, ...times])].sort(),
       });
       setClash(null);
       onSaved();
@@ -137,6 +234,8 @@ export default function MedicationForm({
       setSaving(false);
     }
   };
+
+  const spokenTimes = times.map(clockTime).join(", ");
 
   return (
     <form className="medform" onSubmit={save}>
@@ -173,25 +272,8 @@ export default function MedicationForm({
         </label>
 
         <label>
-          Time
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            required
-          />
-          {/* Whose clock this is. A caregiver abroad is the person this
-              product is for, and a bare time field silently means something
-              other than the one on their own wall. */}
-          <small className="medform__hint">
-            {clockTime(time)} for {elderName}
-            {here && <> · {here} there now</>}
-          </small>
-        </label>
-
-        <label>
           Food
-          <select value={food} onChange={(e) => setFood(e.target.value)}>
+          <select value={food} onChange={(e) => changeFood(e.target.value)}>
             {FOOD_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -201,33 +283,136 @@ export default function MedicationForm({
         </label>
 
         <label>
-          Remind again after
+          How many times a day
           <select
-            value={retry}
-            onChange={(e) => setRetry(Number(e.target.value))}
+            value={TIMES_PER_DAY.some((o) => o.count === times.length)
+              ? times.length
+              : "custom"}
+            onChange={(e) => setTimes(defaultTimes(Number(e.target.value), food))}
           >
-            {[5, 10, 15, 30].map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes} minutes
+            {TIMES_PER_DAY.map((option) => (
+              <option key={option.count} value={option.count}>
+                {option.label}
               </option>
             ))}
+            {/* Only reachable by adding rows by hand — a prescription is never
+                written as "five times a day" in the first instance. */}
+            {!TIMES_PER_DAY.some((o) => o.count === times.length) && (
+              <option value="custom">{times.length} times a day</option>
+            )}
           </select>
-        </label>
-
-        <label>
-          Then tell me after
-          <select
-            value={attempts}
-            onChange={(e) => setAttempts(Number(e.target.value))}
-          >
-            {[1, 2, 3].map((count) => (
-              <option key={count} value={count}>
-                {count} reminder{count > 1 ? "s" : ""}
-              </option>
-            ))}
-          </select>
+          {/* The notation the slip is actually written in, echoed back so a
+              caregiver copying one across can check themselves. Read-only:
+              parsing it as input would guess at dosing, and 1-0-1 already
+              disagrees with the Dose field about what the 1 means. */}
+          <small className="medform__hint">
+            {slipNotation(times)} · morning-afternoon-night
+          </small>
         </label>
       </div>
+
+      <fieldset className="medform__times">
+        <legend>What time for {elderName}</legend>
+
+        {times.map((t, index) => (
+          <div className="medform__timeRow" key={index}>
+            <input
+              type="time"
+              value={t}
+              onChange={(e) => setTimeAt(index, e.target.value)}
+              aria-label={`Dose ${index + 1} of ${times.length}`}
+              required
+            />
+            <small className="medform__hint">{clockTime(t)}</small>
+            {times.length > 1 && (
+              <button
+                type="button"
+                className="btn-quiet"
+                onClick={() => removeTimeAt(index)}
+                aria-label={`Remove the ${clockTime(t)} dose`}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+
+        {times.length < MAX_TIMES && (
+          <button
+            type="button"
+            className="btn-quiet"
+            onClick={() => setTimes([...times, "12:00"])}
+          >
+            Add another time
+          </button>
+        )}
+
+        <small className="medform__hint">
+          OD once · BD twice · TID three times · QID four times a day
+        </small>
+      </fieldset>
+
+      <label className="medform__duration">
+        For how long
+        <select
+          value={durationDays}
+          onChange={(e) => setDurationDays(Number(e.target.value))}
+        >
+          {DURATION_OPTIONS.map((option) => (
+            <option key={option.days} value={option.days}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {/* The whole reason this field exists: a course that ends on its own
+            is one nobody has to remember to end. */}
+        <small className="medform__hint">
+          {durationDays
+            ? `${elderName} stops being reminded after ${durationDays} ${
+                durationDays === 1 ? "day" : "days"
+              }. Starts today.`
+            : `${elderName} is reminded every day until you remove it.`}
+        </small>
+      </label>
+
+      {/* Two knobs almost nobody changes, kept out of the way but with their
+          values still readable without opening anything. */}
+      <details className="medform__fallback">
+        <summary>
+          If they do not answer — remind after {retry} min · tell me after{" "}
+          {attempts} reminder{attempts > 1 ? "s" : ""}
+        </summary>
+
+        <div className="medform__grid">
+          <label>
+            Remind again after
+            <select
+              value={retry}
+              onChange={(e) => setRetry(Number(e.target.value))}
+            >
+              {[5, 10, 15, 30].map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minutes
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Then tell me after
+            <select
+              value={attempts}
+              onChange={(e) => setAttempts(Number(e.target.value))}
+            >
+              {[1, 2, 3].map((count) => (
+                <option key={count} value={count}>
+                  {count} reminder{count > 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
 
       <div className="medform__media">
         <label className="medform__file">
@@ -257,7 +442,8 @@ export default function MedicationForm({
       {clash && (
         <div className="medform__clash" role="alertdialog">
           <p>
-            {clash.message} Did you mean to add <strong>{time}</strong> to it?
+            {clash.message} Did you mean to add <strong>{spokenTimes}</strong> to
+            it?
           </p>
           <div className="medform__clashActions">
             <button
@@ -266,7 +452,7 @@ export default function MedicationForm({
               onClick={addTimeToExisting}
               disabled={saving}
             >
-              Add {time} to {clash.existing_name}
+              Add {spokenTimes} to {clash.existing_name}
             </button>
             <button
               type="button"

@@ -1,3 +1,6 @@
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from app.api.auth import current_caregiver_id, require_elder_access
@@ -8,12 +11,27 @@ from app.api.schemas import (
     RemindNowRequest,
     UpdateMedicationRequest,
 )
+from app.services import course
 from app.services.storage_service import AUDIO_TYPES, IMAGE_TYPES
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 5 * 1024 * 1024
 
 router = APIRouter(prefix="/api", tags=["medications"])
+
+
+def _elder_today(elder: dict) -> date:
+    """Today where the elder lives.
+
+    A course that starts "today" starts on her today. Reading the server's
+    date would begin a Kolkata course on the wrong day for five and a half
+    hours of every one of them.
+    """
+    try:
+        zone = ZoneInfo(elder.get("timezone") or "UTC")
+    except Exception:
+        zone = ZoneInfo("UTC")
+    return datetime.now(zone).date()
 
 
 def _authorized_medication(medication_id: str, caregiver_id: str) -> dict:
@@ -74,6 +92,11 @@ def create_medication(
     # The first scheduled time is the one shown in single-time UIs.
     data["schedule_time"] = data["schedule_times"][0]
 
+    # The end of the course is settled once, on the way in, in her timezone.
+    data["starts_on"], data["ends_on"] = course.resolve_window(
+        request.starts_on, request.duration_days, _elder_today(elder)
+    )
+
     medication_id = firestore.create_medication(data)
     return {"id": medication_id, **data}
 
@@ -113,6 +136,19 @@ def update_medication(
 
     if "schedule_times" in updates:
         updates["schedule_time"] = updates["schedule_times"][0]
+
+    # Recomputed whenever either half of the course window is touched, so
+    # shortening "15 days" to "10" cannot leave yesterday's end date behind.
+    if "duration_days" in updates or "starts_on" in updates:
+        elder = firestore.get_elder(existing.get("elder_id")) or {}
+        starts = request.starts_on or existing.get("starts_on")
+        updates["starts_on"], updates["ends_on"] = course.resolve_window(
+            starts,
+            request.duration_days
+            if request.duration_days is not None
+            else existing.get("duration_days"),
+            _elder_today(elder),
+        )
 
     # Moving a dose from 21:56 to 22:30 used to leave the 21:56 event live,
     # with its own next_attempt_at, while the worker raised a second event for

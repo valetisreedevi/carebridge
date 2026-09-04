@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator
@@ -55,6 +56,11 @@ class CreateMedicationRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     retry_after_minutes: int = Field(default=10, ge=1, le=120)
     max_attempts: int = Field(default=2, ge=1, le=5)
+    # How long the doctor prescribed for. Absent means open-ended, which is
+    # what every medication was before courses existed — so leaving both of
+    # these off keeps the old behaviour exactly.
+    duration_days: int | None = Field(default=None, ge=0, le=365)
+    starts_on: date | None = None
     # Set once the caregiver has been shown the medicine they already have and
     # has said they meant a separate one anyway.
     allow_duplicate: bool = False
@@ -76,6 +82,8 @@ class UpdateMedicationRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     retry_after_minutes: int | None = Field(default=None, ge=1, le=120)
     max_attempts: int | None = Field(default=None, ge=1, le=5)
+    duration_days: int | None = Field(default=None, ge=0, le=365)
+    starts_on: date | None = None
     active: bool | None = None
 
     @field_validator("schedule_times")
