@@ -58,6 +58,30 @@ const STRINGS = {
     en: "CareBridge will let you know when it is time.",
     te: "సమయం అయినప్పుడు CareBridge మీకు తెలియజేస్తుంది.",
   },
+  todaysMedicines: {
+    en: "Today's medicines",
+    te: "ఈ రోజు మందులు",
+  },
+  doseTaken: {
+    en: "taken",
+    te: "తీసుకున్నారు",
+  },
+  doseLater: {
+    en: "later today",
+    te: "ఈ రోజు తర్వాత",
+  },
+  doseNow: {
+    en: "due now",
+    te: "ఇప్పుడు",
+  },
+  doseMissed: {
+    en: "not taken",
+    te: "తీసుకోలేదు",
+  },
+  nothingToday: {
+    en: "No medicines are scheduled for today.",
+    te: "ఈ రోజు మందులు ఏవీ లేవు.",
+  },
   keepPageOpen: {
     en: "Keep this page open and CareBridge will show you when it is time.",
     te: "ఈ పేజీని తెరిచి ఉంచండి, సమయం అయినప్పుడు CareBridge చూపిస్తుంది.",

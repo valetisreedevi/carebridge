@@ -307,6 +307,18 @@ def get_today(
     """What the caregiver dashboard renders: today's plan and where it stands."""
     firestore = deps.firestore_service()
     elder = require_elder_access(elder_id, caregiver_id, firestore)
+    return _today_for(elder)
+
+
+def _today_for(elder: dict) -> dict:
+    """The day, built once and served to whoever is allowed to ask for it.
+
+    Extracted so the elder's own device can be shown the same day the family
+    sees, without the two growing apart. Access is the caller's business; by
+    the time this runs the elder has been resolved and permission settled.
+    """
+    firestore = deps.firestore_service()
+    elder_id = elder["id"]
 
     tz = _elder_zone(elder)
     local_now = datetime.now(tz)
@@ -400,6 +412,63 @@ def get_today(
         "date": local_now.date().isoformat(),
         "items": sorted(items, key=lambda i: i["local_time"]),
         "ledger": build_ledger(events + _unmaterialised(items)).to_dict(),
+    }
+
+
+# What the elder is told about each dose. The dashboard's status vocabulary is
+# built for a family deciding whether to act — ESCALATED, REMINDER_SENT,
+# attempt counts — and none of that is the elder's business or comfort.
+_ELDER_STATE = {
+    "TAKEN": "taken",
+    "UPCOMING": "later",
+    "PENDING": "now",
+    "REMINDER_SENT": "now",
+    "SNOOZED": "now",
+    "ESCALATED": "now",
+    "MISSED": "missed",
+    "DECLINED": "missed",
+    "CANCELLED": "cancelled",
+}
+
+
+@router.get("/my/today")
+def get_my_today(elder_id: str = Depends(current_elder_id)):
+    """Today's medicines, for the elder's own phone.
+
+    Until now a paired device could ask only what was due this minute. Open the
+    app at three in the afternoon and it said "Nothing to take right now" — the
+    same sentence it shows when a reminder has failed, and no help at all to
+    somebody who simply wants to know whether they already took the morning
+    tablet. Somebody who cannot remember is exactly who this product is for.
+
+    Deliberately not the dashboard's payload. The family's view carries attempt
+    counts, escalation times and whether we reached a phone, which belong to
+    the people doing the worrying. This returns the plan and one word for where
+    each dose stands.
+    """
+    firestore = deps.firestore_service()
+    elder = firestore.get_elder(elder_id)
+    if not elder:
+        raise HTTPException(status_code=404, detail="Elder not found")
+
+    day = _today_for(elder)
+
+    return {
+        "date": day["date"],
+        "elder_name": elder.get("name"),
+        "language": elder.get("language") or "en",
+        "items": [
+            {
+                "medication_id": item["medication_id"],
+                "medication_name": item["medication_name"],
+                "dose": item["dose"],
+                "food_instruction": item["food_instruction"],
+                "local_time": item["local_time"],
+                "state": _ELDER_STATE.get(item["status"], "later"),
+            }
+            for item in day["items"]
+            if item["status"] != "CANCELLED"
+        ],
     }
 
 

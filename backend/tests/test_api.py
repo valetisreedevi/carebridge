@@ -394,3 +394,70 @@ def test_a_removed_medication_disappears_from_the_elders_queue(client, db):
 
     assert body["active"] is False
     assert body["reminders"] == []
+
+
+def test_the_elders_own_phone_can_ask_for_the_whole_day(client):
+    """Opening the app off-schedule used to say only "nothing right now".
+
+    Somebody who cannot remember whether they took the morning tablet is
+    exactly who this product is for, and until this endpoint existed their own
+    phone could not tell them.
+    """
+    elder_id, _ = _elder_with_medication(client, time="08:00")
+
+    body = client.get("/api/my/today", headers={"X-Elder-Id": elder_id}).json()
+
+    assert [i["medication_name"] for i in body["items"]] == ["Eye Drops"]
+    assert body["items"][0]["local_time"] == "08:00"
+    assert body["items"][0]["state"] in ("later", "now", "missed")
+    assert body["elder_name"] == "Amma"
+
+
+def test_a_taken_dose_reads_as_taken_on_the_elders_own_screen(client, db):
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, now)
+    client.post(f"/api/reminders/{event_id}/taken", headers={"X-Elder-Id": elder_id})
+
+    body = client.get("/api/my/today", headers={"X-Elder-Id": elder_id}).json()
+
+    # The 08:00 slot the medicine is scheduled for is still on the day as well,
+    # unmaterialised — this event was created for "now", not for 08:00.
+    states = [i["state"] for i in body["items"]]
+    assert states.count("taken") == 1
+
+
+def test_one_elders_phone_cannot_read_another_elders_day(client):
+    """The id comes from the device's own token, never from the request."""
+    first, _ = _elder_with_medication(client, time="08:00")
+    second, _ = _elder_with_medication(client, time="21:00")
+
+    body = client.get("/api/my/today", headers={"X-Elder-Id": first}).json()
+
+    assert {i["local_time"] for i in body["items"]} == {"08:00"}
+    assert second != first
+
+
+def test_the_day_endpoint_never_leaks_the_familys_working_out(client):
+    """Attempt counts and escalation belong to the people doing the worrying."""
+    elder_id, _ = _elder_with_medication(client)
+
+    item = client.get(
+        "/api/my/today", headers={"X-Elder-Id": elder_id}
+    ).json()["items"][0]
+
+    for private in ("attempt", "escalated_at", "reached_a_phone", "next_attempt_at"):
+        assert private not in item

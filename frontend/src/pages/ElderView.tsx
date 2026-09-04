@@ -4,6 +4,8 @@ import {
   ApiError,
   pairedElderIds,
   unpairElder,
+  type MyDay,
+  type MyDayItem,
   type Reminder,
 } from "../api/client";
 import { firebaseConfigured, watchElder } from "../api/firebase";
@@ -25,6 +27,70 @@ type Turn = { who: "elder" | "carebridge"; text: string };
 /** Resolving means Firebase has not yet said whether this device is paired. */
 type Credential = "resolving" | "paired" | "unpaired";
 
+/**
+ * The rest of today, on the screen she sees when nothing is due.
+ *
+ * Opening the app off-schedule used to say only "Nothing to take right now" —
+ * the same sentence a failed reminder shows, and no answer at all to the
+ * question somebody actually opens it with, which is whether they already took
+ * the morning tablet. Somebody who cannot remember is precisely who this is
+ * for.
+ *
+ * It asks nothing and offers nothing to tap. Every dose is one line: a mark, a
+ * time, a name. The marks carry a word beside them rather than only a colour,
+ * because a tick and a circle at arm's length in a lit room are not reliably
+ * different things.
+ */
+function DayList({ day, lang }: { day: MyDay | null; lang: string }) {
+  if (!day) return null;
+
+  const shown = day.items.filter((item) => item.state !== "cancelled");
+  if (shown.length === 0) {
+    return <p className="elder__muted">{t("nothingToday", lang)}</p>;
+  }
+
+  const WORD: Record<MyDayItem["state"], StringKey> = {
+    taken: "doseTaken",
+    now: "doseNow",
+    later: "doseLater",
+    missed: "doseMissed",
+    cancelled: "doseLater",
+  };
+
+  return (
+    <section className="today">
+      <h2 className="today__title">{t("todaysMedicines", lang)}</h2>
+      <ul className="today__list">
+        {shown.map((item) => (
+          <li
+            key={`${item.medication_id}-${item.local_time}`}
+            className={`today__row today__row--${item.state}`}
+          >
+            <span className="today__mark" aria-hidden="true">
+              {item.state === "taken" ? "✓" : "○"}
+            </span>
+            <span className="today__when">{item.local_time}</span>
+            <span className="today__what">
+              <strong>{item.medication_name}</strong>
+              <small>
+                {[
+                  item.dose,
+                  item.food_instruction
+                    ? tFood(item.food_instruction, lang)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </small>
+            </span>
+            <span className="today__state">{t(WORD[item.state], lang)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function ElderView() {
   const [elderIds, setElderIds] = useState<string[]>(pairedElderIds());
   const elderId = elderIds[0] ?? null;
@@ -37,6 +103,8 @@ export default function ElderView() {
   // Whatever is at the front of the queue is the one being asked about. A
   // morning is rarely one tablet, but it is always one decision at a time.
   const reminder = queue[0] ?? null;
+  // The whole day, for the times she opens the app when nothing is due.
+  const [day, setDay] = useState<MyDay | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -133,6 +201,27 @@ export default function ElderView() {
       setUnreachable(true);
     }
   }, [ready, elderIds]);
+
+  // The rest of the day, for the quiet screen. Fetched on the same beat as the
+  // queue but kept apart from it: a day that will not load must never stop a
+  // reminder appearing, so this failure is allowed to pass in silence and
+  // leave the screen exactly as it was before.
+  const refreshDay = useCallback(async () => {
+    if (!ready || !elderId) return;
+    try {
+      setDay(await api.myToday(elderId));
+    } catch {
+      // The reminder path is the one that matters; this is context.
+    }
+  }, [ready, elderId]);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    refreshDay();
+    const timer = setInterval(refreshDay, POLL_MS * 4);
+    return () => clearInterval(timer);
+  }, [ready, refreshDay]);
 
   useEffect(() => {
     if (!ready) return;
@@ -410,6 +499,8 @@ export default function ElderView() {
         <p className="elder__muted">
           {t(push === "on" ? "willLetYouKnow" : "keepPageOpen", lang)}
         </p>
+
+        <DayList day={day} lang={lang} />
 
         {/* Offered here, on the quiet screen, because asking is a setup step
             and this is where whoever sets the phone up will be standing. */}

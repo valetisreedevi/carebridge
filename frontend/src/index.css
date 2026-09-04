@@ -1016,6 +1016,124 @@ textarea:focus {
   padding-top: 5rem;
 }
 
+/* ---------------- today, on the quiet elder screen ----------------
+ *
+ * The list she sees when nothing is due. Everything here is sized for the same
+ * eyes the reminder screen is built for: no dense rows, no colour carrying
+ * meaning on its own, and nothing to tap. The elder scale rule further up in
+ * this file applies — do not normalise these down to dashboard sizes.
+ */
+.today {
+  margin: 3rem auto 0;
+  max-width: 30rem;
+  text-align: left;
+}
+
+.today__title {
+  margin: 0 0 1rem;
+  font-family: var(--font-human);
+  font-size: 1.9rem;
+  font-weight: 500;
+  text-align: center;
+  color: var(--ink);
+}
+
+.today__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.today__row {
+  display: grid;
+  grid-template-columns: 2.4rem 5.4rem 1fr auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+
+.today__mark {
+  font-size: 1.9rem;
+  line-height: 1;
+  text-align: center;
+  color: var(--line-strong);
+}
+
+.today__when {
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.today__what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.today__what strong {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.today__what small {
+  font-size: 1.15rem;
+  color: var(--muted);
+}
+
+/* The word, not only the colour. A tick and a circle are not reliably
+   different things at arm's length in a lit room. */
+.today__state {
+  font-size: 1.1rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.today__row--taken {
+  background: var(--good-bg);
+  border-color: transparent;
+}
+
+.today__row--taken .today__mark,
+.today__row--taken .today__state {
+  color: var(--good);
+}
+
+.today__row--now {
+  background: var(--warn-bg);
+  border-color: transparent;
+}
+
+.today__row--now .today__mark,
+.today__row--now .today__state {
+  color: var(--warn);
+}
+
+.today__row--missed .today__state {
+  color: var(--warn);
+}
+
+@media (max-width: 30rem) {
+  .today__row {
+    grid-template-columns: 2rem 4.6rem 1fr;
+    row-gap: 0.35rem;
+  }
+
+  .today__state {
+    grid-column: 3;
+    justify-self: start;
+  }
+}
+
 .elder__tick {
   width: 5.5rem;
   height: 5.5rem;

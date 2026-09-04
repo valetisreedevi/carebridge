@@ -200,6 +200,24 @@ export type Medication = {
   ends_on?: string | null;
 };
 
+/** The day as the elder's own phone is told it: the plan, and one word for
+ *  where each dose stands. None of the family's working out. */
+export type MyDayItem = {
+  medication_id: string;
+  medication_name: string;
+  dose: string | null;
+  food_instruction: string | null;
+  local_time: string;
+  state: "taken" | "now" | "later" | "missed" | "cancelled";
+};
+
+export type MyDay = {
+  date: string;
+  elder_name: string | null;
+  language: string;
+  items: MyDayItem[];
+};
+
 export type DayItem = {
   event_id: string | null;
   medication_id: string;
@@ -456,6 +474,10 @@ export const api = {
 
   /** A paired phone filing its own notification address. The elder id comes
    *  from the device's credentials, never the body. */
+  /** Today's plan for whichever elder this device is paired to. */
+  myToday: (elderId: string) =>
+    request<MyDay>("/api/my/today", { as: "elder", elderId }),
+
   registerMyDevice: (elderId: string, fcmToken: string, label: string | null) =>
     request<{ id: string; elder_id: string }>("/api/devices/mine", {
       method: "POST",
