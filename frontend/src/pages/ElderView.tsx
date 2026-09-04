@@ -41,7 +41,70 @@ type Credential = "resolving" | "paired" | "unpaired";
  * because a tick and a circle at arm's length in a lit room are not reliably
  * different things.
  */
-function DayList({ day, lang }: { day: MyDay | null; lang: string }) {
+function DayPhoto({
+  medicationId,
+  elderId,
+  hasPhoto,
+  taken,
+}: {
+  medicationId: string;
+  elderId: string | null;
+  hasPhoto: boolean;
+  taken: boolean;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasPhoto || !elderId) return;
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    api
+      .myMedicationImageUrl(medicationId, elderId)
+      .then((next) => {
+        if (cancelled) {
+          URL.revokeObjectURL(next);
+          return;
+        }
+        objectUrl = next;
+        setUrl(next);
+      })
+      .catch(() => {
+        // A picture that will not load must never take the row with it.
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [medicationId, elderId, hasPhoto]);
+
+  if (url) {
+    return (
+      <span className="today__mark today__mark--photo">
+        <img src={url} alt="" />
+        {taken && <span className="today__done" aria-hidden="true">✓</span>}
+      </span>
+    );
+  }
+
+  return (
+    <span className="today__mark" aria-hidden="true">
+      {taken ? "✓" : "○"}
+    </span>
+  );
+}
+
+function DayList({
+  day,
+  lang,
+  elderId,
+}: {
+  day: MyDay | null;
+  lang: string;
+  elderId: string | null;
+}) {
   if (!day) return null;
 
   const shown = day.items.filter((item) => item.state !== "cancelled");
@@ -66,9 +129,12 @@ function DayList({ day, lang }: { day: MyDay | null; lang: string }) {
             key={`${item.medication_id}-${item.local_time}`}
             className={`today__row today__row--${item.state}`}
           >
-            <span className="today__mark" aria-hidden="true">
-              {item.state === "taken" ? "✓" : "○"}
-            </span>
+            <DayPhoto
+              medicationId={item.medication_id}
+              elderId={elderId}
+              hasPhoto={item.has_photo}
+              taken={item.state === "taken"}
+            />
             <span className="today__when">{item.local_time}</span>
             <span className="today__what">
               <strong>{item.medication_name}</strong>
@@ -500,7 +566,7 @@ export default function ElderView() {
           {t(push === "on" ? "willLetYouKnow" : "keepPageOpen", lang)}
         </p>
 
-        <DayList day={day} lang={lang} />
+        <DayList day={day} lang={lang} elderId={elderId} />
 
         {/* Offered here, on the quiet screen, because asking is a setup step
             and this is where whoever sets the phone up will be standing. */}

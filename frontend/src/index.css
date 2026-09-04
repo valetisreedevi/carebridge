@@ -1049,7 +1049,7 @@ textarea:focus {
 
 .today__row {
   display: grid;
-  grid-template-columns: 2.4rem 5.4rem 1fr auto;
+  grid-template-columns: 3.4rem 5.4rem 1fr auto;
   align-items: center;
   gap: 0.9rem;
   padding: 1rem 1.1rem;
@@ -1063,6 +1063,43 @@ textarea:focus {
   line-height: 1;
   text-align: center;
   color: var(--line-strong);
+}
+
+/* The photograph the family took, in place of the mark. She may not read the
+   name — it can be in an alphabet she was never taught — but she knows the
+   strip on sight, which is the whole reason the app asks for a picture. */
+.today__mark--photo {
+  position: relative;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+}
+
+.today__mark--photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The tick still has to be there on a taken dose — the picture tells her which
+   medicine, not whether she has had it. */
+.today__done {
+  position: absolute;
+  right: -0.3rem;
+  bottom: -0.3rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--good);
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1.5rem;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--good-bg);
 }
 
 .today__when {
@@ -1124,8 +1161,13 @@ textarea:focus {
 
 @media (max-width: 30rem) {
   .today__row {
-    grid-template-columns: 2rem 4.6rem 1fr;
+    grid-template-columns: 3rem 4.6rem 1fr;
     row-gap: 0.35rem;
+  }
+
+  .today__mark--photo {
+    width: 3rem;
+    height: 3rem;
   }
 
   .today__state {

@@ -461,3 +461,37 @@ def test_the_day_endpoint_never_leaks_the_familys_working_out(client):
 
     for private in ("attempt", "escalated_at", "reached_a_phone", "next_attempt_at"):
         assert private not in item
+
+
+def test_the_elders_day_says_which_doses_have_a_photograph(client):
+    elder_id, _ = _elder_with_medication(client)
+
+    item = client.get(
+        "/api/my/today", headers={"X-Elder-Id": elder_id}
+    ).json()["items"][0]
+
+    # No photo was uploaded, so the screen should not go asking for one.
+    assert item["has_photo"] is False
+    # The object name is the family's plumbing, not hers.
+    assert "photo_object_name" not in item
+
+
+def test_an_elders_phone_cannot_fetch_another_elders_photograph(client):
+    """The caregiver image route settles access through require_elder_access,
+    which an elder cannot satisfy. This one compares against the token."""
+    first, first_med = _elder_with_medication(client)
+    second, _ = _elder_with_medication(client)
+
+    denied = client.get(
+        f"/api/my/medications/{first_med}/image",
+        headers={"X-Elder-Id": second},
+    )
+    assert denied.status_code == 404
+
+    # Her own medicine is found; there is simply no photo on it here.
+    mine = client.get(
+        f"/api/my/medications/{first_med}/image",
+        headers={"X-Elder-Id": first},
+    )
+    assert mine.status_code == 404
+    assert mine.json()["detail"] == "No photo uploaded"

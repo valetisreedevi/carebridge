@@ -465,6 +465,9 @@ def get_my_today(elder_id: str = Depends(current_elder_id)):
                 "food_instruction": item["food_instruction"],
                 "local_time": item["local_time"],
                 "state": _ELDER_STATE.get(item["status"], "later"),
+                # Whether to ask for the picture at all. The object name itself
+                # is not her business; a boolean is all the screen needs.
+                "has_photo": bool(item.get("photo_object_name")),
             }
             for item in day["items"]
             if item["status"] != "CANCELLED"

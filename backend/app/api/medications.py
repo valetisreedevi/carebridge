@@ -3,7 +3,11 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
-from app.api.auth import current_caregiver_id, require_elder_access
+from app.api.auth import (
+    current_caregiver_id,
+    current_elder_id,
+    require_elder_access,
+)
 from app.api import deps
 from app.api.schemas import (
     CreateMedicationRequest,
@@ -305,6 +309,34 @@ def get_image(
     caregiver_id: str = Depends(current_caregiver_id),
 ):
     medication = _authorized_medication(medication_id, caregiver_id)
+    return _stream(medication.get("photo_object_name"), "No photo uploaded")
+
+
+@router.get("/my/medications/{medication_id}/image")
+def get_my_image(
+    medication_id: str,
+    elder_id: str = Depends(current_elder_id),
+):
+    """The tablet's photograph, for the elder's own screen.
+
+    The caregiver route above cannot serve this: it settles access through
+    require_elder_access, which asks whether a CAREGIVER may see an elder, and
+    an elder holds no such credential. Without this the day list on her own
+    phone could show her every name and time and not one of the photographs —
+    the photograph being the thing she recognises fastest, and often the only
+    thing on the row she can read.
+
+    The elder id comes from the device's own token, so a phone can only ever
+    fetch a picture belonging to the person it was paired to.
+    """
+    firestore = deps.firestore_service()
+    medication = firestore.get_medication(medication_id)
+
+    if not medication:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    if medication.get("elder_id") != elder_id:
+        raise HTTPException(status_code=404, detail="Medication not found")
+
     return _stream(medication.get("photo_object_name"), "No photo uploaded")
 
 

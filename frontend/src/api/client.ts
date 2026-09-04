@@ -209,6 +209,9 @@ export type MyDayItem = {
   food_instruction: string | null;
   local_time: string;
   state: "taken" | "now" | "later" | "missed" | "cancelled";
+  /** Whether to go and ask for the picture. The object name stays with the
+   *  family; the elder screen only needs to know there is one. */
+  has_photo: boolean;
 };
 
 export type MyDay = {
@@ -477,6 +480,14 @@ export const api = {
   /** Today's plan for whichever elder this device is paired to. */
   myToday: (elderId: string) =>
     request<MyDay>("/api/my/today", { as: "elder", elderId }),
+
+  /** The tablet's photograph, signed with the elder's own credential.
+   *
+   *  medicationImageUrl above cannot serve this screen: it sends a caregiver
+   *  token, which a paired phone does not hold.
+   */
+  myMedicationImageUrl: (medicationId: string, elderId: string) =>
+    api.mediaObjectUrl(`/api/my/medications/${medicationId}/image`, elderId),
 
   registerMyDevice: (elderId: string, fcmToken: string, label: string | null) =>
     request<{ id: string; elder_id: string }>("/api/devices/mine", {
