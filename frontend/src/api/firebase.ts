@@ -234,6 +234,11 @@ export async function setDisplayName(name: string): Promise<void> {
   await auth.currentUser.reload();
 }
 
+/** Re-reads the signed-in user, so a verification done elsewhere is noticed. */
+export async function refreshUser(): Promise<void> {
+  await auth?.currentUser?.reload();
+}
+
 export async function resendVerificationEmail() {
   if (auth?.currentUser) await sendEmailVerification(auth.currentUser);
 }

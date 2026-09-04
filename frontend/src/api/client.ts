@@ -206,6 +206,8 @@ export type DayItem = {
   medication_name: string;
   dose: string | null;
   food_instruction: string | null;
+  /** Sent by the API all along; the dashboard simply never read it. */
+  photo_object_name?: string | null;
   local_time: string;
   status: string;
   attempt: number;
@@ -516,6 +518,28 @@ export const api = {
 
   /** Media served by the API needs the elder header, so <img src> cannot
    *  fetch it directly. Signed GCS URLs are absolute and pass through. */
+  /** The medicine photograph, for the caregiver's own screens.
+   *
+   *  mediaObjectUrl below signs with the ELDER's credential, which a caregiver
+   *  does not hold — so the dashboard could not fetch an image at all, and
+   *  simply never showed one. The photograph is the thing the family chose to
+   *  upload; not rendering it made every medicine look like an empty record.
+   */
+  medicationImageUrl: async (medicationId: string): Promise<string> => {
+    const token = firebaseConfigured ? await idToken() : null;
+    const response = await fetch(
+      `${API_URL}/api/medications/${medicationId}/image`,
+      {
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : { "X-Caregiver-Id": caregiverId() },
+      },
+    );
+    if (!response.ok) throw new ApiError(response.status, "Could not load photo");
+
+    return URL.createObjectURL(await response.blob());
+  },
+
   mediaObjectUrl: async (path: string, elderId: string): Promise<string> => {
     if (path.startsWith("http")) return path;
 

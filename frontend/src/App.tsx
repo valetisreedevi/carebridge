@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import {
   BrowserRouter,
   Link,
@@ -12,6 +12,7 @@ import { pairedElderId } from "./api/client";
 import {
   emailIsVerified,
   firebaseConfigured,
+  refreshUser,
   resendVerificationEmail,
   setDisplayName,
   signOutCaregiver,
@@ -182,6 +183,7 @@ function VerifyBanner({ user }: { user: User }) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(firebaseConfigured);
+  const [, recheck] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
     if (!firebaseConfigured) return;
@@ -190,6 +192,21 @@ export default function App() {
       setUser(next);
       setChecking(false);
     });
+  }, []);
+
+  // Verifying an address happens in a different tab, and the User object this
+  // tab is holding keeps saying emailVerified: false until it is reloaded. The
+  // banner therefore outlived the thing it was asking for — it was still
+  // demanding confirmation of an address that had just been confirmed.
+  // onAuthStateChanged does not fire for this, so the re-render is forced.
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+
+    const onFocus = () => {
+      refreshUser().then(recheck);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   if (checking) {
@@ -210,7 +227,13 @@ export default function App() {
       {user && !emailIsVerified(user) && <VerifyBanner user={user} />}
       <Routes>
         <Route path="/" element={caregiverArea} />
-        <Route path="/signin" element={<SignIn />} />
+        {/* Signing in left the form on screen, because nothing sent a
+            signed-in caregiver anywhere. Success and failure looked identical:
+            the same page, the same filled-in fields. */}
+        <Route
+          path="/signin"
+          element={user ? <Navigate to="/" replace /> : <SignIn />}
+        />
         <Route path="/elder" element={<ElderView />} />
         {/* Outside the sign-in gate: someone resetting a password cannot
             sign in, which is the whole reason they are here. */}

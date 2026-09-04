@@ -383,6 +383,64 @@ function verdict(items: DayItem[]): { text: string; alert: boolean } {
  *  answered, and they add up — so a family can check them rather than trust
  *  them.
  */
+/** The photograph of the tablet, beside its row on the day.
+ *
+ *  The family goes to the trouble of photographing the actual strip, the elder
+ *  screen shows it, and the dashboard showed nothing — so the one piece of the
+ *  record that is unmistakably theirs was invisible on the screen they spend
+ *  their time on. Fetched per row rather than in the day's payload because the
+ *  image is authenticated and the payload is JSON; the object URL is released
+ *  when the row goes away.
+ */
+function MedicinePhoto({
+  medicationId,
+  hasPhoto,
+  name,
+}: {
+  medicationId: string;
+  hasPhoto: boolean;
+  name: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasPhoto) return;
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    api
+      .medicationImageUrl(medicationId)
+      .then((next) => {
+        if (cancelled) {
+          URL.revokeObjectURL(next);
+          return;
+        }
+        objectUrl = next;
+        setUrl(next);
+      })
+      // A photo that will not load is not worth an error on a medicines list.
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [medicationId, hasPhoto]);
+
+  if (!hasPhoto || !url) {
+    // The initial keeps the row's shape steady, so the list does not jump as
+    // photographs arrive one by one.
+    return (
+      <span className="schedule__photo schedule__photo--none" aria-hidden="true">
+        {name.trim().charAt(0).toUpperCase() || "?"}
+      </span>
+    );
+  }
+
+  return <img className="schedule__photo" src={url} alt="" />;
+}
+
 function Progress({ ledger }: { ledger: Ledger }) {
   const { scheduled, asked, taken, unreachable, taken_on_trust } = ledger;
   const shownTaken = useCountUp(taken);
@@ -438,7 +496,7 @@ function Progress({ ledger }: { ledger: Ledger }) {
       <ul className="ledger__key">
         <li>
           <span className="ledger__swatch ledger__swatch--taken" />
-          She answered
+          They answered
         </li>
         <li>
           <span className="ledger__swatch ledger__swatch--asked" />
@@ -1248,6 +1306,12 @@ export default function Dashboard() {
                     }`}
                   >
                     <span className="schedule__time">{clockTime(item.local_time)}</span>
+
+                    <MedicinePhoto
+                      medicationId={item.medication_id}
+                      hasPhoto={Boolean(item.photo_object_name)}
+                      name={item.medication_name}
+                    />
 
                     <span className="schedule__what">
                       <strong>{item.medication_name}</strong>
