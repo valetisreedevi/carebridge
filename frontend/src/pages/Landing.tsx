@@ -237,23 +237,25 @@ export default function Landing() {
 
       <section className="land__hero">
         <div className="land__heroText">
-          <p className="land__eyebrow">For families who live apart</p>
+          <p className="land__eyebrow">Two screens. One family.</p>
           <h1>
-            At eight o'clock,<br />
-            their phone wakes up<br />
-            <em>and it is you.</em>
+            You cannot be there<br />
+            at eight in the morning.<br />
+            <em>Your voice can.</em>
           </h1>
           <p className="land__lede">
-            CareBridge reminds the person you look after in your own recorded
-            voice — on a phone that lights itself up, in the language they
-            think in — and tells you honestly what happened.
+            CareBridge is two halves of one thing. You set up the medicines and
+            record a reminder in <em>your</em> own voice. They get a phone that
+            wakes itself at the right time and plays it — nothing to open,
+            nothing to read. Then you see what actually happened, so you never
+            have to ring and ask.
           </p>
           <div className="land__cta">
             <Link className="btn-primary" to="/signin">
               Get started
             </Link>
             <a className="land__quiet" href="#honest">
-              See how we count
+              How it stays honest
             </a>
           </div>
         </div>
@@ -263,11 +265,16 @@ export default function Landing() {
 
       <section className="land__story">
         <Reveal as="p">
-          They are at home. You are not. There are four tablets a day, and some
-          days one gets forgotten — and you find out on Sunday, if at all.
+          A missed dose is almost never stubbornness. You have a shift to get
+          to, a meeting that runs on, a child to collect. They have four tablets
+          a day, a strip that looks like every other strip, and nobody in the
+          room to say which one is next. The only way to find out is to ring and
+          ask — and be told yes, because they would rather not have you
+          worrying.
         </Reveal>
         <Reveal as="p" className="land__strike" delay={140}>
-          CareBridge asks, waits for an answer, and tells you what it heard.
+          CareBridge asks for you, at the moment it matters, in a voice they
+          will not ignore. Then it tells you what it actually heard.
         </Reveal>
       </section>
 
@@ -275,7 +282,7 @@ export default function Landing() {
         <ol>
           <Reveal as="li" delay={0}>
             <span className="land__num">1</span>
-            <h3>Set it up once</h3>
+            <h3>You set it up, once</h3>
             <p>
               The medicine, the dose, which parts of the day, and how long the
               doctor prescribed for. Ten days means ten days — it stops on its
@@ -284,7 +291,7 @@ export default function Landing() {
           </Reveal>
           <Reveal as="li" delay={110}>
             <span className="land__num">2</span>
-            <h3>Their phone wakes up</h3>
+            <h3>Their phone does the rest</h3>
             <p>
               Even locked, even face-down. It plays the message you recorded, in
               their own language, beside a photograph of the tablet.
@@ -292,7 +299,7 @@ export default function Landing() {
           </Reveal>
           <Reveal as="li" delay={220}>
             <span className="land__num">3</span>
-            <h3>One button, and it is done</h3>
+            <h3>One button, and you know</h3>
             <p>
               Or they say it out loud. If nobody answers, CareBridge tries again —
               and then it tells you, by notification and by email.
@@ -306,7 +313,7 @@ export default function Landing() {
           Both are built from the app's own class names — .elder__* and
           .schedule__row and .ledger are the same rules the live product uses. */}
       <section className="show">
-        <p className="land__eyebrow">The two ends of it</p>
+        <p className="land__eyebrow">Their side. Your side.</p>
         <Reveal as="h2">Their phone. Your dashboard.</Reveal>
 
         <div className="show__pair">
@@ -409,8 +416,8 @@ export default function Landing() {
 
       <section className="land__honest" id="honest">
         <div className="land__honestText">
-          <p className="land__eyebrow">The part that matters</p>
-          <Reveal as="h2">We count three things, not one.</Reveal>
+          <p className="land__eyebrow">Being straight with you</p>
+          <Reveal as="h2">Three numbers, not one.</Reveal>
           <p>
             What the doctor prescribed. What CareBridge actually managed to
             ask about. And what came back as an answer. Three numbers, kept
@@ -450,7 +457,7 @@ export default function Landing() {
             <ul className="ledger__key">
               <li>
                 <span className="ledger__swatch ledger__swatch--taken" />
-                She answered
+                They answered
               </li>
               <li>
                 <span className="ledger__swatch ledger__swatch--asked" />
@@ -471,12 +478,12 @@ export default function Landing() {
 
       <section className="land__features">
         <p className="land__eyebrow">What it actually does</p>
-        <Reveal as="h2">Everything here is running, not planned.</Reveal>
+        <Reveal as="h2">Built around how medicine actually works.</Reveal>
 
         <ul className="feats">
           <Feature
             index={0}
-            title="Her family's voice, not a chime"
+            title="Your voice, not a chime"
             demo={
               <div className="demo demo--voice">
                 <span className="phone__wave" />
@@ -520,7 +527,7 @@ export default function Landing() {
 
           <Feature
             index={3}
-            title="One evening, one buzz"
+            title="Three tablets, one moment"
             demo={
               <div className="demo demo--count">
                 <em>1 of 3</em>
@@ -545,8 +552,8 @@ export default function Landing() {
               </div>
             }
           >
-            The screen lights itself, face-down and locked, and plays out loud
-            through silent mode. Proven on a real handset, not an emulator.
+            It lights up face-down, locked, and on silent — the times a
+            reminder matters most.
           </Feature>
 
           <Feature
@@ -566,7 +573,13 @@ export default function Landing() {
       </section>
 
       <section className="land__end">
-        <Reveal as="h2">Stop wondering whether they took it.</Reveal>
+        <Reveal as="h2">
+          Go to work. CareBridge stays with them.
+        </Reveal>
+        <Reveal as="p" className="land__endSub" delay={120}>
+          It takes a few minutes to set up, and then it is one less thing you
+          carry through the day.
+        </Reveal>
         <Link className="btn-primary" to="/signin">
           Get started
         </Link>
