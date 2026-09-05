@@ -495,3 +495,95 @@ def test_an_elders_phone_cannot_fetch_another_elders_photograph(client):
     )
     assert mine.status_code == 404
     assert mine.json()["detail"] == "No photo uploaded"
+
+
+def test_answering_on_her_own_device_proves_the_reminder_arrived(client, db):
+    """reached_a_phone is otherwise set only from FCM delivery.
+
+    A household reached some other way — a browser holding the elder screen
+    open and polling, which is what a device without notification permission
+    does — recorded the dose as taken AND as never delivered. The dashboard
+    then read: 1 taken, 0 asked, a bar entirely "never reached them", and a
+    weekly note saying nobody had asked about a dose she had just answered.
+    """
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    # No device registered, so no push was delivered.
+    events.record_reminder_sent(event_id, now, reached=False)
+    assert events.get_event(event_id)["reached_a_phone"] is False
+
+    client.post(f"/api/reminders/{event_id}/taken", headers={"X-Elder-Id": elder_id})
+
+    answered = events.get_event(event_id)
+    assert answered["status"] == "TAKEN"
+    assert answered["reached_a_phone"] is True
+
+
+def test_a_snooze_and_a_decline_also_prove_it_arrived(client, db):
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+
+    for action, body in (("snooze", {"minutes": 10}), ("decline", {"reason": "later"})):
+        elder_id, medication_id = _elder_with_medication(client)
+        event_id = events.create_event(
+            medication_id=medication_id,
+            elder_id=elder_id,
+            scheduled_at=now,
+            retry_after_minutes=10,
+            max_attempts=2,
+        )
+        events.record_reminder_sent(event_id, now, reached=False)
+
+        client.post(
+            f"/api/reminders/{event_id}/{action}",
+            json=body,
+            headers={"X-Elder-Id": elder_id},
+        )
+
+        assert events.get_event(event_id)["reached_a_phone"] is True, action
+
+
+def test_the_caregiver_marking_it_taken_does_not_claim_we_reached_her(client, db):
+    """The family ticking a dose off from another city proves nothing about
+    whether the reminder ever arrived, and must not quietly repair the record."""
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, now, reached=False)
+
+    client.post(
+        f"/api/medications/{medication_id}/mark-taken",
+        json={"local_time": "08:00"},
+        headers=CAREGIVER,
+    )
+
+    assert events.get_event(event_id)["reached_a_phone"] is False

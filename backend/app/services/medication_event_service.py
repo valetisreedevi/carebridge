@@ -145,24 +145,38 @@ class MedicationEventService:
         return apply(self.db.transaction(), self._ref(event_id))
 
     def confirm_event(self, event_id: str) -> dict:
-        """The elder saying so on their own device."""
+        """The elder saying so on their own device.
+
+        An answer is proof of delivery. reached_a_phone is otherwise set only
+        from FCM, so a household reached some other way — a browser holding the
+        elder screen open and polling, which is exactly what a device with no
+        notification permission does — recorded the dose as taken AND as never
+        delivered. The dashboard then showed one taken, none asked, a bar that
+        was entirely "never reached them", and a weekly note saying nobody had
+        asked her about a dose she had just answered on her own screen.
+
+        Nobody can press "I took it" on a reminder they never received.
+        """
         return self._transition(
             event_id,
             MedicationEventStatus.TAKEN,
             {
                 "confirmed_at": datetime.now(timezone.utc),
                 "confirmed_source": "ELDER",
+                "reached_a_phone": True,
                 "next_attempt_at": None,
             },
         )
 
     def decline_event(self, event_id: str, reason: str | None = None) -> dict:
+        """Also an answer, and so also proof the reminder arrived."""
         return self._transition(
             event_id,
             MedicationEventStatus.DECLINED,
             {
                 "declined_at": datetime.now(timezone.utc),
                 "decline_reason": reason,
+                "reached_a_phone": True,
                 "next_attempt_at": None,
             },
         )
@@ -186,6 +200,8 @@ class MedicationEventService:
                 "next_attempt_at": now + timedelta(minutes=minutes),
                 "snoozed_minutes": minutes,
                 "snooze_count": already + 1,
+                # "Remind me later" is an answer too. She saw it.
+                "reached_a_phone": True,
             },
         )
 
