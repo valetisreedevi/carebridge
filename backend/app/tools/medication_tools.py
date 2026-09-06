@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from app.config import get_settings
 from app.models.medication import FOOD_INSTRUCTION_TEXT, FoodInstruction
 from app.models.medication_event import InvalidTransition
+from app.services.adherence_service import elder_zone
 from app.services.firestore_service import FirestoreService
 from app.services.medication_event_service import MedicationEventService
 from app.services.notification_service import NotificationService
+from app.services.spoken_time import say_moment
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,32 @@ def _food_text(medication: dict) -> str:
         return "as instructed"
 
 
+def _when(event: dict, medication: dict, elder: dict, language: str) -> dict:
+    """When THIS dose is due, said the way she would say it.
+
+    Two things used to go wrong here. The time came from
+    medication["schedule_time"], which is schedule_times[0] - so a twice-daily
+    medicine ringing at nine in the evening told the model eight in the
+    morning. And the value was a bare "21:00" with no instruction anywhere
+    about how to speak it, which the model resolved by guessing, differently
+    each time.
+
+    The event knows which dose is ringing, and the phrasing is arithmetic.
+    """
+    scheduled_at = event.get("scheduled_at")
+    if scheduled_at is None:
+        # A dose with no instant on it cannot be placed in her day. Better to
+        # say nothing about the time than to name the wrong one.
+        return {"scheduled_time": None, "scheduled_time_spoken": None}
+
+    tz = elder_zone(elder)
+    local = scheduled_at.astimezone(tz)
+    return {
+        "scheduled_time": local.strftime("%H:%M"),
+        "scheduled_time_spoken": say_moment(scheduled_at, tz, language),
+    }
+
+
 def get_current_reminder() -> dict:
     """Get the medication reminder the elder is being asked about right now.
 
@@ -81,16 +109,17 @@ def get_current_reminder() -> dict:
         return {"success": False, "message": "That medication could not be found."}
 
     elder = firestore.get_elder(context.elder_id) or {}
+    # Which language to answer in. A household that never set one gets
+    # English, which is the same fallback the elder screen uses.
+    language = elder.get("preferred_language") or "en"
 
     return {
         "success": True,
-        # Which language to answer in. A household that never set one gets
-        # English, which is the same fallback the elder screen uses.
-        "speak_language": elder.get("preferred_language") or "en",
+        "speak_language": language,
         "medication_name": medication.get("name"),
         "dose": medication.get("dose"),
         "food_instruction": _food_text(medication),
-        "scheduled_time": medication.get("schedule_time"),
+        **_when(event, medication, elder, language),
         "status": event["status"],
         "attempt": event.get("attempt", 0),
     }
@@ -104,13 +133,17 @@ def get_medication_instructions() -> dict:
     the elder needs advice beyond what is recorded here, tell them to check
     with their caregiver, doctor or pharmacist.
     """
-    _, event, error = _resolve()
+    context, event, error = _resolve()
     if error:
         return {"success": False, "message": error}
 
-    medication = FirestoreService().get_medication(event["medication_id"])
+    firestore = FirestoreService()
+    medication = firestore.get_medication(event["medication_id"])
     if not medication:
         return {"success": False, "message": "That medication could not be found."}
+
+    elder = firestore.get_elder(context.elder_id) or {}
+    language = elder.get("preferred_language") or "en"
 
     return {
         "success": True,
@@ -118,7 +151,7 @@ def get_medication_instructions() -> dict:
         "dose": medication.get("dose"),
         "food_instruction": _food_text(medication),
         "notes": medication.get("notes") or "",
-        "schedule_time": medication.get("schedule_time"),
+        **_when(event, medication, elder, language),
     }
 
 
@@ -160,7 +193,7 @@ def snooze_reminder(minutes: int) -> dict:
     when the reminder repeats - it never changes the dose, the schedule or the
     food instruction.
     """
-    _, event, error = _resolve()
+    context, event, error = _resolve()
     if error:
         return {"success": False, "message": error}
 
@@ -178,11 +211,18 @@ def snooze_reminder(minutes: int) -> dict:
     except InvalidTransition as exc:
         return {"success": False, "message": str(exc)}
 
+    # Said in her own clock, not as a UTC instant. This used to hand the model
+    # an ISO timestamp in UTC with no instruction, so "when will you remind me?"
+    # could be answered several hours out.
+    elder = FirestoreService().get_elder(context.elder_id) or {}
+    language = elder.get("preferred_language") or "en"
+    next_at = updated["next_attempt_at"]
+
     return {
         "success": True,
         "status": "SNOOZED",
         "minutes": minutes,
-        "next_reminder_at": updated["next_attempt_at"].isoformat(),
+        "next_reminder_spoken": say_moment(next_at, elder_zone(elder), language),
     }
 
 
