@@ -3678,3 +3678,193 @@ html,
 body {
   overflow-x: hidden;
 }
+
+/* ============================================================
+   THE CARE TEAM
+
+   Everything here is new and prefixed. Nothing in this block may
+   reach .schedule__row, .ledger, .progress or .elder__* — those are
+   the LIVE product's rules, shared with the mockups above, and an
+   unscoped edit here restyles the elder's actual phone.
+
+   The one media query is at the very end of the file on purpose:
+   the 46rem / 30rem / @container trio further up is order-dependent
+   and has silently broken once already.
+   ============================================================ */
+
+.team {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 5.5rem 1.5rem 1rem;
+}
+
+.team > h2 {
+  margin: 0.35rem 0 2.25rem;
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.team__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+.team__text p {
+  margin: 0 0 1.1rem;
+  font-size: 1.12rem;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+/* The second-parent line is a smaller, quieter fact than the two
+   paragraphs above it, and reads as an aside rather than a third claim. */
+.team__aside {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+.team__fan {
+  margin: 0;
+  padding: 1.75rem 1.25rem 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+/* The dose that went unanswered. Warn, not bad: nobody has failed yet,
+   the question simply has not been answered. */
+.team__event {
+  display: inline-block;
+  margin: 0;
+  padding: 0.5rem 0.95rem;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+/* One dose, three people told. A stem down from the dose, a bar across, and
+   a drop into each name. Borders rather than an SVG so the whole thing takes
+   its colour from --line-strong and there is no second source of truth.
+
+   The bar stops at the centre of the outer columns (100/3/2 = 16.667%) so it
+   ends exactly where the outer drops fall, instead of overshooting into the
+   card's padding. */
+.team__lines {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  height: 2.75rem;
+  margin: 0.25rem 0 0;
+}
+
+.team__lines::before {
+  content: "";
+  position: absolute;
+  top: 1.25rem;
+  left: 16.667%;
+  right: 16.667%;
+  border-top: 1px solid var(--line-strong);
+}
+
+.team__lines::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 1.25rem;
+  border-left: 1px solid var(--line-strong);
+}
+
+.team__lines span {
+  justify-self: center;
+  height: 1.5rem;
+  margin-top: 1.25rem;
+  border-left: 1px solid var(--line-strong);
+}
+
+.team__people {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team__people li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.35rem;
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm);
+}
+
+.team__name {
+  font-weight: 600;
+  color: var(--brand-ink);
+  font-size: 1rem;
+}
+
+.team__where {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* The line that earns the trust, so it is given the width of the section
+   and the serif rather than being tucked under the diagram. */
+.team__note {
+  max-width: 46rem;
+  margin: 2.25rem auto 0;
+  text-align: center;
+  font-family: var(--font-human);
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* One account, two parents — the chips on the dashboard mock. Scoped under
+   .show__dash so they cannot leak into the real dashboard's own chip row. */
+.show__dash .show__people {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
+}
+
+.show__dash .show__person {
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.show__dash .show__person--on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+@media (max-width: 56rem) {
+  .team {
+    padding-top: 4rem;
+  }
+
+  .team__pair {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}

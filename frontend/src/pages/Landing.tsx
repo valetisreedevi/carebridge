@@ -237,7 +237,7 @@ export default function Landing() {
 
       <section className="land__hero">
         <div className="land__heroText">
-          <p className="land__eyebrow">Two screens. One family.</p>
+          <p className="land__eyebrow">Two screens. However many of you.</p>
           <h1>
             You cannot be there<br />
             at eight in the morning.<br />
@@ -376,6 +376,13 @@ export default function Landing() {
 
           <figure className="show__side show__side--wide">
             <div className="show__dash">
+              {/* One account, both parents. The real dashboard switches people
+                  with exactly this row of chips; here it is decoration, so it
+                  is a list rather than the live buttons. */}
+              <ul className="show__people">
+                <li className="show__person show__person--on">Amma</li>
+                <li className="show__person">Nanna</li>
+              </ul>
               <p className="dash__eyebrow">Today</p>
               <p className="dash__verdict dash__verdict--alert">
                 Fever Tablet needs your attention
@@ -440,6 +447,60 @@ export default function Landing() {
             </figcaption>
           </figure>
         </div>
+      </section>
+
+      <section className="team">
+        <p className="land__eyebrow">Nobody has to be the only one</p>
+        <Reveal as="h2">Care is rarely one person&rsquo;s job.</Reveal>
+
+        <div className="team__pair">
+          <div className="team__text">
+            <Reveal as="p" delay={60}>
+              Right now it is a group chat and a rota nobody agreed to. One of
+              you rings at nine to check. Another rings at half past, because
+              they did not know the first call happened.
+            </Reveal>
+            <Reveal as="p" delay={120}>
+              Invite whoever shares it — your brother, your sister, the
+              neighbour who has a key. Everyone sees the same day. And when a
+              dose goes unanswered, <em>everyone</em> is told.
+            </Reveal>
+            <Reveal as="p" delay={180} className="team__aside">
+              And if it is both your parents, that is one account and two
+              people — not two logins and twice the remembering.
+            </Reveal>
+          </div>
+
+          {/* Not a diagram of an idea: this is what notify_caregiver does with
+              a missed dose - one message per person on the elder's team. */}
+          <figure className="team__fan" aria-hidden="true">
+            <p className="team__event">8:00 PM · no answer</p>
+            <div className="team__lines">
+              <span />
+              <span />
+              <span />
+            </div>
+            <ul className="team__people">
+              <li>
+                <span className="team__name">Meera</span>
+                <span className="team__where">Bangalore</span>
+              </li>
+              <li>
+                <span className="team__name">Raghu</span>
+                <span className="team__where">Dubai</span>
+              </li>
+              <li>
+                <span className="team__name">Lakshmi</span>
+                <span className="team__where">next door</span>
+              </li>
+            </ul>
+          </figure>
+        </div>
+
+        <Reveal as="p" delay={240} className="team__note">
+          Each of them told separately, in their own message — so the neighbour
+          helping for a fortnight never sees the family&rsquo;s email addresses.
+        </Reveal>
       </section>
 
       <section className="land__honest" id="honest">
