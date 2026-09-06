@@ -41,6 +41,15 @@ PARTS: dict[str, dict[str, str]] = {
 # English puts the part of day after the clock, Telugu before it.
 TEMPLATES = {"en": "{clock} {part}", "te": "{part} {clock}"}
 
+# What separates the hour from the minutes, and it is not only a typographic
+# choice. Read aloud by Google's Telugu voice, a COLON makes the numeral a
+# clock time, and the voice then supplies its own part of the day on top of
+# ours: "ఉదయం 1:50" is spoken as "ఉదయం అర్ధరాత్రి…" - the same doubling this
+# module exists to stop, arriving one layer further down. A dot is read as
+# digits and leaves the sentence alone. English has neither the problem nor
+# the convention, and keeps its colon.
+SEPARATORS = {"en": ":", "te": "."}
+
 FALLBACK = "en"
 
 
@@ -54,16 +63,16 @@ def part_of_day(hour: int) -> str:
     return "night"
 
 
-def spoken_clock(hour: int, minute: int) -> str:
+def spoken_clock(hour: int, minute: int, separator: str = ":") -> str:
     """13:05 -> 1:05. The part of day carries what am/pm would have said."""
-    return f"{hour % 12 or 12}:{minute:02d}"
+    return f"{hour % 12 or 12}{separator}{minute:02d}"
 
 
 def say_time(hour: int, minute: int, language: str | None) -> str:
     """One phrase, ready to be repeated verbatim by the model."""
     tongue = language if language in PARTS else FALLBACK
     return TEMPLATES[tongue].format(
-        clock=spoken_clock(hour, minute),
+        clock=spoken_clock(hour, minute, SEPARATORS[tongue]),
         part=PARTS[tongue][part_of_day(hour)],
     )
 

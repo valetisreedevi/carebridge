@@ -43,9 +43,20 @@ def test_every_hour_lands_in_exactly_one_part_of_the_day(hour, minute, expected)
 
 def test_telugu_puts_the_part_of_the_day_first():
     """Word order is not the same in both languages, so the template is not
-    either. 1:30 in the morning is ఉదయం 1:30, not 1:30 ఉదయం."""
-    assert say_time(1, 30, "te") == "ఉదయం 1:30"
-    assert say_time(21, 0, "te") == "రాత్రి 9:00"
+    either. 1:30 in the morning is ఉదయం 1.30, not 1.30 ఉదయం."""
+    assert say_time(1, 30, "te") == "ఉదయం 1.30"
+    assert say_time(21, 0, "te") == "రాత్రి 9.00"
+
+
+def test_telugu_separates_the_minutes_with_a_dot_and_english_with_a_colon():
+    """Not typography. Read aloud, a colon makes Google's Telugu voice treat
+    the numeral as a clock time and add its OWN part of the day on top of ours,
+    so ఉదయం 1:50 is spoken as ఉదయం అర్ధరాత్రి. Confirmed by ear on real
+    synthesised audio. A dot is read as digits and leaves the sentence alone.
+    """
+    assert ":" not in say_time(1, 50, "te")
+    assert say_time(1, 50, "te") == "ఉదయం 1.50"
+    assert say_time(1, 50, "en") == "1:50 in the morning"
 
 
 def test_a_language_nobody_has_words_for_still_says_something():
