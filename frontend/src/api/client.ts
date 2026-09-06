@@ -558,6 +558,29 @@ export const api = {
    *  simply never showed one. The photograph is the thing the family chose to
    *  upload; not rendering it made every medicine look like an empty record.
    */
+  /** The voice message currently stored against a medicine, for the caregiver.
+   *
+   *  So the edit form can play back what is actually saved rather than trusting
+   *  that whatever was recorded a moment ago made it to the server. A recording
+   *  that silently failed to upload is otherwise indistinguishable from one
+   *  that worked, and the elder goes on hearing the previous one.
+   */
+  medicationAudioUrl: async (medicationId: string): Promise<string> => {
+    const token = firebaseConfigured ? await idToken() : null;
+    const response = await fetch(
+      `${API_URL}/api/medications/${medicationId}/audio`,
+      {
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : { "X-Caregiver-Id": caregiverId() },
+      },
+    );
+    if (!response.ok)
+      throw new ApiError(response.status, "Could not load the voice message");
+
+    return URL.createObjectURL(await response.blob());
+  },
+
   medicationImageUrl: async (medicationId: string): Promise<string> => {
     const token = firebaseConfigured ? await idToken() : null;
     const response = await fetch(

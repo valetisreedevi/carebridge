@@ -706,9 +706,35 @@ textarea:focus {
   font-weight: 550;
 }
 
+/* Neutral by default. It used to be green for everything, which made "no
+   message saved yet" read as reassurance. Green is now reserved for the one
+   state that has actually changed something. */
 .medform__voice small {
   font-weight: 400;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.medform__voice small.is-new {
   color: var(--good);
+}
+
+/* A link, not a control: it sits inside a sentence. */
+.medform__play {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.medform__play:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
 }
 
 .medform__rec {

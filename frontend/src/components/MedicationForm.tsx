@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clockTime, timeIn } from "../format";
 import {
   api,
@@ -129,8 +129,25 @@ export default function MedicationForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clash, setClash] = useState<DuplicateMedicine | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   const recorder = useRef<MediaRecorder | null>(null);
+  // Resolved by the recorder's own stop handler. save() waits on this when the
+  // caregiver is still recording, because "record, speak, save" is what people
+  // actually do and the blob does not exist until the recorder has stopped.
+  const finished = useRef<((blob: Blob) => void) | null>(null);
+  // Held separately so the microphone can be released if this form closes
+  // mid-recording. It used to be stopped only inside onstop, so closing the
+  // editor while recording left the mic light on until the tab was closed.
+  const mic = useRef<MediaStream | null>(null);
+
+  useEffect(
+    () => () => {
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      mic.current?.getTracks().forEach((track) => track.stop());
+    },
+    [],
+  );
 
   // Read at render rather than ticked: it only has to be right while somebody
   // is filling the form in, and every keystroke re-renders.
@@ -190,16 +207,96 @@ export default function MedicationForm({
 
       media.ondataavailable = (event) => chunks.push(event.data);
       media.onstop = () => {
-        setRecording(new Blob(chunks, { type: "audio/webm" }));
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        setRecording(blob);
+        // Hands the blob to whoever is waiting - save(), if the caregiver
+        // pressed Save without pressing Stop first.
+        finished.current?.(blob);
+        finished.current = null;
         stream.getTracks().forEach((track) => track.stop());
+        mic.current = null;
       };
 
       media.start();
       recorder.current = media;
+      mic.current = stream;
       setListening(true);
       setError(null);
     } catch {
       setError("Microphone access was blocked.");
+    }
+  };
+
+  /** Stops the recorder if it is running and returns the finished blob.
+   *
+   *  Returns the state value when nothing is recording, so callers can treat
+   *  the two cases the same. The blob is returned rather than read back from
+   *  state because setRecording has not landed by the time save() continues.
+   */
+  const stopRecordingIfRunning = async (): Promise<Blob | null> => {
+    const media = recorder.current;
+    // Asked of the recorder rather than of React state: stop() throws if it is
+    // not recording, and this runs before save()'s try block, so a throw here
+    // would escape and leave the form spinning on Saving for ever.
+    if (media?.state !== "recording") return recording;
+
+    const blob = await new Promise<Blob>((resolve) => {
+      finished.current = resolve;
+      media.stop();
+    });
+    setListening(false);
+    return blob;
+  };
+
+  /** The voice message goes first, deliberately.
+   *
+   *  These used to run photo-first in the same try as the medicine itself, so
+   *  a photo the phone made too large threw before the recording was ever
+   *  uploaded - and the caregiver saw a save error for a save that had already
+   *  succeeded. Each is now reported for what it is, and neither can discard
+   *  the other.
+   */
+  const saveMedia = async (medicationId: string, voice: Blob | null) => {
+    if (voice) {
+      try {
+        await api.uploadAudio(medicationId, voice, "voice.webm");
+      } catch {
+        throw new Error(
+          "The medicine was saved, but the voice message could not be uploaded. Record it again.",
+        );
+      }
+    }
+
+    if (photo) {
+      try {
+        await api.uploadImage(medicationId, photo, photo.name);
+      } catch {
+        throw new Error(
+          "The medicine was saved, but the photo could not be uploaded. Try a smaller one.",
+        );
+      }
+    }
+  };
+
+  /** Plays back the message the SERVER holds, not the one in this form.
+   *
+   *  The only way to tell a recording that uploaded from one that quietly did
+   *  not is to ask the server for it and listen.
+   */
+  const playStored = async () => {
+    if (!existing) return;
+    setPlaying(true);
+    try {
+      const url = await api.medicationAudioUrl(existing.id);
+      const audio = new Audio(url);
+      audio.onended = () => {
+        setPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
+    } catch {
+      setPlaying(false);
+      setError("Could not play the saved voice message.");
     }
   };
 
@@ -219,6 +316,13 @@ export default function MedicationForm({
       duration_days: durationDays,
     };
 
+    // Before anything else: if they are still recording, finish it. Pressing
+    // Save while the recorder runs used to leave `recording` null, so the
+    // upload was never attempted and nothing failed - the medicine saved, the
+    // photo uploaded, and the elder went on hearing the previous message in
+    // the previous language.
+    const voice = await stopRecordingIfRunning();
+
     try {
       const medication = existing
         ? await api.updateMedication(existing.id, fields)
@@ -228,10 +332,7 @@ export default function MedicationForm({
             allow_duplicate: force,
           });
 
-      // Media is optional; a failed upload should not lose the medication.
-      if (photo) await api.uploadImage(medication.id, photo, photo.name);
-      if (recording) await api.uploadAudio(medication.id, recording, "voice.webm");
-
+      await saveMedia(medication.id, voice);
       onSaved();
     } catch (e) {
       // Not an error to report but a choice to offer: almost always the
@@ -248,10 +349,15 @@ export default function MedicationForm({
   const addTimeToExisting = async () => {
     if (!clash) return;
     setSaving(true);
+    // Anything they recorded or photographed on the way to this dialog belongs
+    // to the medicine they are folding into. This used to send the times alone
+    // and drop both without saying so.
+    const voice = await stopRecordingIfRunning();
     try {
       await api.updateMedication(clash.existing_id, {
         schedule_times: [...new Set([...clash.existing_times, ...times])].sort(),
       });
+      await saveMedia(clash.existing_id, voice);
       setClash(null);
       onSaved();
     } catch (e) {
@@ -451,6 +557,10 @@ export default function MedicationForm({
           />
         </label>
 
+        {/* What the SERVER holds, not what this form is holding. A recording
+            that failed to upload used to look exactly like one that worked -
+            the old message went on playing, in the old language, and nothing
+            on this screen disagreed. */}
         <div className="medform__voice">
           <span>Your voice</span>
           <button
@@ -458,9 +568,42 @@ export default function MedicationForm({
             className={listening ? "medform__rec" : ""}
             onClick={toggleRecording}
           >
-            {listening ? "Stop recording" : recording ? "Record again" : "Record a message"}
+            {listening
+              ? "Stop recording"
+              : recording
+                ? "Record again"
+                : existing?.caregiver_audio_object_name
+                  ? "Replace the message"
+                  : "Record a message"}
           </button>
-          {recording && <small>Saved · plays at reminder time</small>}
+
+          {listening && <small>Recording — this will be saved when you save.</small>}
+
+          {!listening && recording && (
+            <small className="is-new">
+              New message ready · it replaces the saved one when you save
+            </small>
+          )}
+
+          {!listening && !recording && existing?.caregiver_audio_object_name && (
+            <small>
+              A message is saved and plays at reminder time.{" "}
+              <button
+                type="button"
+                className="medform__play"
+                onClick={playStored}
+                disabled={playing}
+              >
+                {playing ? "Playing…" : "Hear it"}
+              </button>
+            </small>
+          )}
+
+          {!listening && !recording && existing && !existing.caregiver_audio_object_name && (
+            <small>
+              No message saved yet — CareBridge reads the reminder out instead.
+            </small>
+          )}
         </div>
       </div>
 
