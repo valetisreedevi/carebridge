@@ -1663,6 +1663,13 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      {/* The page used to stop in empty cream. This ends it, and says the one
+          thing a screen full of medicine times should never leave implied. */}
+      <footer className="dash__foot">
+        CareBridge reminds you. It does not advise, diagnose, or replace a
+        doctor.
+      </footer>
     </div>
   );
 }

@@ -244,12 +244,10 @@ export default function Landing() {
             <em>Your voice can.</em>
           </h1>
           <p className="land__lede">
-            CareBridge is two halves of one thing. You set up the medicines and
-            record a reminder in <em>your</em> own voice. CareBridge goes on
-            their phone once — after that they never open it. At the right time
-            it wakes itself and plays your voice: nothing to tap, nothing to
-            read, nothing to remember. Then you see what actually happened, so
-            you never have to ring and ask.
+            You set up the medicines and record a reminder in <em>your</em> own
+            voice. CareBridge goes on their phone once — after that they never
+            open it. It wakes itself at the right time, and they hear you. Then
+            you see what actually happened, so you never have to ring and ask.
           </p>
           <div className="land__cta">
             <Link className="btn-primary" to="/signin">
@@ -455,19 +453,6 @@ export default function Landing() {
             that never arrived — is marked as ours to fix, not as a dose
             somebody declined to take.
           </p>
-          <p className="land__fineprint">
-            Your recording, the photographs of the medicines and the record of
-            who answered stay inside your own account. They are used to send
-            the reminders and to show you this page, and for nothing else — not
-            sold, not advertised against, not shared with anyone you have not
-            invited to the care team. You can delete a medicine, and its
-            recording goes with it.
-          </p>
-          <p className="land__fineprint">
-            <strong>CareBridge reminds. It does not advise, diagnose, or
-            replace a doctor.</strong> The schedule is the one you enter, and
-            it is only ever as right as the prescription you were given.
-          </p>
         </div>
 
         {/* Not a picture of the product: the product's own markup and
@@ -512,6 +497,29 @@ export default function Landing() {
               2 doses were never asked about — no reminder reached the phone.
             </p>
           </section>
+        </div>
+
+        {/* Spans both columns rather than sitting in the text one. Stacked
+            under the argument it made the left side run long past the ledger
+            beside it, and what happens to a recording of your mother's voice
+            reads as an evasion when it is squeezed in as a column footnote. */}
+        <div className="land__terms">
+          <p>
+            Your recording, the photographs of the medicines and the record of
+            who answered stay inside your own account. They are used to send the
+            reminders and to show you this page, and for nothing else — not
+            sold, not advertised against, not shared with anyone you have not
+            invited to the care team. You can delete a medicine, and its
+            recording goes with it.
+          </p>
+          <p>
+            <strong>
+              CareBridge reminds. It does not advise, diagnose, or replace a
+              doctor.
+            </strong>{" "}
+            The schedule is the one you enter, and it is only ever as right as
+            the prescription you were given.
+          </p>
         </div>
       </section>
 

@@ -1620,6 +1620,47 @@ textarea:focus {
   }
 }
 
+/* The row is starved by its CONTAINER, not by the window.
+ *
+ * In the dashboard's left column it gets about 500px at a 1280px viewport, so
+ * neither query above ever fires - and .schedule__what was rendering 77px
+ * wide, stacking the medicine name, its course and its dose into one word per
+ * line inside a card with room to spare. A `1fr` column cannot win against two
+ * `auto` ones that take their content width first.
+ *
+ * Same restructure as the 46rem block, keyed to the thing that is actually too
+ * small. Must stay AFTER both viewport blocks: equal specificity, so source
+ * order decides - see the warning above.
+ */
+.schedule {
+  container-type: inline-size;
+  container-name: schedule;
+}
+
+@container schedule (max-width: 34rem) {
+  .schedule__row {
+    grid-template-columns: 3.4rem 2.4rem 1fr;
+    row-gap: 0.6rem;
+  }
+
+  .schedule__photo {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .schedule__status {
+    grid-column: 3;
+    text-align: left;
+    justify-self: start;
+  }
+
+  .schedule__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
 /* One tablet at a time, but say how many are coming. Without this the elder
  * confirms one, another appears, and it feels like the screen is not listening.
  * Sized with the elder scale, not the dashboard's. */
@@ -2329,6 +2370,19 @@ textarea:focus {
   align-items: start;
 }
 
+/* Quiet, and the last thing on the page rather than a gap where the page
+   stopped caring. Centred because it belongs to the whole screen, not to the
+   column it happens to sit under. */
+.dash__foot {
+  margin-top: 3rem;
+  padding: 1.3rem 0 2.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--muted);
+  text-align: center;
+}
+
 .dash__aside {
   display: flex;
   flex-direction: column;
@@ -2811,6 +2865,37 @@ textarea:focus {
   color: var(--muted);
 }
 
+/* Below both columns, not inside one. The rule above the text is the seam
+   between the argument and the terms of it. */
+.land__terms {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.6rem 3rem;
+  margin-top: 0.6rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--line);
+}
+
+.land__terms p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.land__terms strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+@media (max-width: 56rem) {
+  .land__terms {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+}
+
 .land__ledger {
   padding: 1.4rem 1.5rem;
   border-radius: var(--radius);
@@ -3265,6 +3350,18 @@ a.btn-primary--sm {
   font-size: 1.05rem;
   padding: 0.7rem 1.2rem;
   margin-bottom: 1rem;
+}
+
+/* Without this the mock speaks louder than the product does. The base rule
+   sizes .elder__mic with .elder__button at 1.65rem, and only .elder__button is
+   scaled down here - so the secondary way to answer was rendering larger than
+   "I took it", wrapping onto two lines, and reading as the loudest thing on a
+   phone whose whole point is one obvious action. */
+.show__elder .elder__mic {
+  font-size: 1.2rem;
+  padding: 0.85rem;
+  margin-bottom: 0.6rem;
+  border-width: 1.5px;
 }
 
 .show__elder .elder__button {
