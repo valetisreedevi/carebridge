@@ -20,6 +20,20 @@ import { clockTime, sinceWhen, timeIn } from "../format";
 
 const POLL_MS = 10000;
 
+/** The friendly sentence, always - never the exception's own words.
+ *
+ *  Every catch here used to fall back to e.message, which made the readable
+ *  string the exception rather than the rule: one dropped connection and a
+ *  daughter checking on her mother reads "Failed to fetch" in the banner. She
+ *  learns nothing from it and trusts the screen less. The detail still exists,
+ *  in the console, where somebody who can act on it will look.
+ */
+function friendly(e: unknown, sentence: string): string {
+  console.error(sentence, e);
+  return sentence;
+}
+
+
 /** Counts from zero to `value` once, then tracks it.
  *
  *  The three figures are the product's argument, and an argument that animates
@@ -522,7 +536,7 @@ function Progress({ ledger }: { ledger: Ledger }) {
       {taken_on_trust > 0 && (
         <p className="progress__trust">
           {taken_on_trust === 1 ? "1 was" : `${taken_on_trust} were`} recorded on
-          your word rather than hers.
+          your word rather than theirs.
         </p>
       )}
     </section>
@@ -585,7 +599,7 @@ function History({ days }: { days: HistoryDay[] }) {
       <p className="card__hint week__legend">
         Taken, out of the doses CareBridge was able to ask about. A crossed day
         is one where a reminder never reached the phone — that one is ours, not
-        hers.
+        theirs.
       </p>
     </section>
   );
@@ -741,7 +755,7 @@ export default function Dashboard() {
       setElders(list);
       setSelected((current) => current ?? list[0]?.id ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load");
+      setError(friendly(e, "Could not load"));
     } finally {
       setLoaded(true);
     }
@@ -764,7 +778,7 @@ export default function Dashboard() {
       setHistory(past.days);
       setPhones(devices);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load");
+      setError(friendly(e, "Could not load"));
     }
   }, [selected]);
 
@@ -828,7 +842,7 @@ export default function Dashboard() {
       await loadElders();
       setSelected(elder.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not add");
+      setError(friendly(e, "Could not add"));
     }
   };
 
@@ -851,7 +865,7 @@ export default function Dashboard() {
       await api.triggerReminder(medicationId, localTime);
       await loadDay();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send the reminder");
+      setError(friendly(e, "Could not send the reminder"));
     }
   };
 
@@ -874,7 +888,7 @@ export default function Dashboard() {
             }. Pair again with a new code.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not sign the phones out");
+      setError(friendly(e, "Could not sign the phones out"));
     }
   };
 
@@ -884,7 +898,7 @@ export default function Dashboard() {
     try {
       setSelfTest(await api.selfTest(elderId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not run the check");
+      setError(friendly(e, "Could not run the check"));
     } finally {
       setTesting(false);
     }
@@ -895,7 +909,7 @@ export default function Dashboard() {
       await api.acknowledgeAlert(eventId);
       await loadDay();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not mark it handled");
+      setError(friendly(e, "Could not mark it handled"));
     }
   };
 
@@ -905,7 +919,7 @@ export default function Dashboard() {
       await api.markTakenByCaregiver(medicationId, localTime);
       await loadDay();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not record it");
+      setError(friendly(e, "Could not record it"));
     }
   };
 
@@ -915,7 +929,7 @@ export default function Dashboard() {
       setRemoving(null);
       await loadDay();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not remove it");
+      setError(friendly(e, "Could not remove it"));
     }
   };
 
@@ -925,7 +939,7 @@ export default function Dashboard() {
       const created = await api.createInvite(selected);
       setInviteCode({ elderId: selected, code: created.code });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not make an invite");
+      setError(friendly(e, "Could not make an invite"));
     }
   };
 
@@ -941,7 +955,7 @@ export default function Dashboard() {
       await loadElders();
       setSelected(joined.elder_id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That code did not work");
+      setError(friendly(e, "That code did not work"));
     }
   };
 
@@ -951,7 +965,7 @@ export default function Dashboard() {
       await api.removeCaregiver(selected, memberId);
       await loadTeam();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not remove them");
+      setError(friendly(e, "Could not remove them"));
     }
   };
 
@@ -962,7 +976,7 @@ export default function Dashboard() {
       await loadElders();
       await loadDay();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not change the timezone");
+      setError(friendly(e, "Could not change the timezone"));
     }
   };
 
@@ -972,7 +986,7 @@ export default function Dashboard() {
       await api.updateElder(selected, { preferred_language: language });
       await loadElders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not change the language");
+      setError(friendly(e, "Could not change the language"));
     }
   };
 
@@ -982,7 +996,7 @@ export default function Dashboard() {
       const result = await api.pairingCode(elderId);
       setPairingCode({ elderId, code: result.code });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not make a code");
+      setError(friendly(e, "Could not make a code"));
     } finally {
       setPairingBusy(false);
     }
@@ -1022,8 +1036,8 @@ export default function Dashboard() {
             recorded as sent to nobody. */}
         {phones?.length === 0 && elder && (
           <p className="dash__nophone">
-            No phone is set up for {elder.name}, so reminders cannot reach her.
-            Get a pairing code below and enter it on her phone.
+            No phone is set up for {elder.name}, so reminders cannot reach them.
+            Get a pairing code below and enter it on their phone.
           </p>
         )}
 
@@ -1087,11 +1101,19 @@ export default function Dashboard() {
         </p>
       )}
 
+      {/* The first screen anyone sees after signing up, and it used to be one
+          flat sentence. The landing page promises two halves of one thing; this
+          is where the second half has to start making sense. */}
       {loaded && !elder && (
         <section className="card">
-          <p className="empty">
-            Add the person you look after to get started.
-          </p>
+          <div className="empty">
+            <h2 className="empty__title">Start with one person.</h2>
+            <p>
+              Add whoever you look after, up above. Then their medicines, and a
+              reminder in your own voice — that is the whole setup. Their phone
+              does the rest.
+            </p>
+          </div>
         </section>
       )}
 
@@ -1291,8 +1313,8 @@ export default function Dashboard() {
 
             {items.length === 0 && !adding ? (
               <p className="empty">
-                Nothing scheduled yet. Add a medication and CareBridge will take
-                it from there.
+                Nothing scheduled yet. Add a medicine, record the reminder in
+                your own voice, and their phone does the rest.
               </p>
             ) : (
               <ul className="schedule">
@@ -1578,7 +1600,7 @@ export default function Dashboard() {
               </button>
               <p className="muted">
                 Rings {elder.name}'s phone and checks every step of the chain.
-                Nothing is recorded against her medicines.
+                Nothing is recorded against their medicines.
               </p>
               {selfTest && <SelfTestResult result={selfTest} />}
             </div>
@@ -1667,8 +1689,7 @@ export default function Dashboard() {
       {/* The page used to stop in empty cream. This ends it, and says the one
           thing a screen full of medicine times should never leave implied. */}
       <footer className="dash__foot">
-        CareBridge reminds you. It does not advise, diagnose, or replace a
-        doctor.
+        CareBridge reminds. It does not advise, diagnose, or replace a doctor.
       </footer>
     </div>
   );

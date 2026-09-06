@@ -418,6 +418,23 @@ textarea:focus {
   border-radius: var(--radius-sm);
 }
 
+.empty p {
+  margin: 0;
+  max-width: 34rem;
+  margin-inline: auto;
+  line-height: 1.65;
+}
+
+/* The one empty state that is somebody's first minute with the product, so it
+   gets a voice rather than a shrug. */
+.empty__title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-human);
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
 /* ---------------- today's schedule ---------------- */
 
 .schedule {
@@ -2937,11 +2954,22 @@ textarea:focus {
 }
 
 .land__endSub {
-  margin: 0 auto 1.75rem;
+  margin: 0 auto 1.25rem;
   max-width: 30rem;
   color: var(--ink-soft);
   font-size: 1.05rem;
   line-height: 1.6;
+}
+
+/* Said quietly, and last. It is the only claim on this page that cannot be
+   written by somebody who has not done it. */
+.land__true {
+  margin: 0 auto 1.9rem;
+  max-width: 27rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  font-style: italic;
 }
 
 .land__foot {
@@ -2954,6 +2982,20 @@ textarea:focus {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+/* This was rendering at rgb(0, 0, 238) - raw browser link blue, and purple once
+   visited - on a page where every other colour was chosen. An unstyled anchor
+   is the loudest thing you can leave in a quiet footer. */
+.land__foot a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.land__foot a:hover {
+  color: var(--brand);
+  border-bottom-color: color-mix(in srgb, var(--brand) 45%, transparent);
 }
 
 @media (max-width: 56rem) {

@@ -17,8 +17,8 @@ const HEADING: Record<Mode, string> = {
 };
 
 const SUBHEADING: Record<Mode, string> = {
-  in: "Keep track of a family member's medication, without having to ask.",
-  up: "It takes a minute. You will add the person you care for next.",
+  in: "See what actually happened today, without having to ring and ask.",
+  up: "A few minutes now. You will add the person you look after next.",
   reset: "We will email you a link to choose a new password.",
 };
 
@@ -131,7 +131,7 @@ export default function SignIn() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
-                placeholder="Sridevi"
+                placeholder="Meera"
               />
               <small className="signin__hint">
                 What CareBridge calls you. Your email stays private.

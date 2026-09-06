@@ -302,8 +302,9 @@ export default function Landing() {
             <span className="land__num">3</span>
             <h3>One button, and you know</h3>
             <p>
-              Or they say it out loud. If nobody answers, CareBridge tries again —
-              and then it tells you, by notification and by email.
+              They press it, or they just say so out loud. If nobody answers,
+              CareBridge tries again — and then it tells you, by notification
+              and by email.
             </p>
           </Reveal>
         </ol>
@@ -314,7 +315,10 @@ export default function Landing() {
           Both are built from the app's own class names — .elder__* and
           .schedule__row and .ledger are the same rules the live product uses. */}
       <section className="show">
-        <p className="land__eyebrow">The two people this is for</p>
+        {/* The heading below already names both people. The eyebrow that used
+            to sit here said it a third time, after the hero eyebrow had said it
+            first. */}
+        <p className="land__eyebrow">What each of you sees</p>
         <Reveal as="h2">Their phone. Your dashboard.</Reveal>
 
         <div className="show__pair">
@@ -613,8 +617,9 @@ export default function Landing() {
               </div>
             }
           >
-            If nobody answers, CareBridge tries again, then tells you — and says
-            plainly whether the failure was theirs or ours.
+            If nobody answers, CareBridge tries again. When that goes unanswered
+            too it stops guessing and comes to you — a notification, then an
+            email — and says plainly whether the failure was theirs or ours.
           </Feature>
         </ul>
       </section>
@@ -624,8 +629,15 @@ export default function Landing() {
           Go to work. CareBridge stays with them.
         </Reveal>
         <Reveal as="p" className="land__endSub" delay={120}>
-          It takes a few minutes to set up, and then it is one less thing you
-          carry through the day.
+          A few minutes to set up, and then it is one less thing you carry
+          through the day.
+        </Reveal>
+        {/* The one thing on this page nobody else can copy, and the reason the
+            language support exists at all. No names: it is not a biography, it
+            is the answer to why the product is this shape. */}
+        <Reveal as="p" className="land__true" delay={200}>
+          CareBridge was built for one person, and they use it every day. The
+          Telugu is not a feature — it is the language they think in.
         </Reveal>
         <Link className="btn-primary" to="/signin">
           Get started
