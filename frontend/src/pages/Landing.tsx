@@ -628,16 +628,20 @@ export default function Landing() {
         <Reveal as="h2">
           Go to work. CareBridge stays with them.
         </Reveal>
-        <Reveal as="p" className="land__endSub" delay={120}>
+        {/* What it does, then what it costs you, then the button. Nothing here
+            asks the reader to infer anything: what they do, what the other
+            person gets, what happens when nobody answers - and only then how
+            little it takes to start. */}
+        <Reveal as="p" className="land__close" delay={120}>
+          Leave a reminder in your own voice. They hear you at the right time.
+        </Reveal>
+        <Reveal as="p" className="land__close" delay={200}>
+          And if a dose goes unanswered, CareBridge comes to you — a
+          notification, then an email.
+        </Reveal>
+        <Reveal as="p" className="land__endSub" delay={280}>
           A few minutes to set up, and then it is one less thing you carry
           through the day.
-        </Reveal>
-        {/* The one thing on this page nobody else can copy, and the reason the
-            language support exists at all. No names: it is not a biography, it
-            is the answer to why the product is this shape. */}
-        <Reveal as="p" className="land__true" delay={200}>
-          CareBridge was built for one person, and they use it every day. The
-          Telugu is not a feature — it is the language they think in.
         </Reveal>
         <Link className="btn-primary" to="/signin">
           Get started

@@ -2953,23 +2953,29 @@ textarea:focus {
   font-weight: 500;
 }
 
+/* Now the last thing before the button rather than the first thing after the
+   heading: what it does, then what it costs you, then act. */
 .land__endSub {
-  margin: 0 auto 1.25rem;
+  margin: 1.35rem auto 1.9rem;
   max-width: 30rem;
   color: var(--ink-soft);
   font-size: 1.05rem;
   line-height: 1.6;
 }
 
-/* Said quietly, and last. It is the only claim on this page that cannot be
-   written by somebody who has not done it. */
-.land__true {
-  margin: 0 auto 1.9rem;
-  max-width: 27rem;
-  color: var(--muted);
-  font-size: 0.95rem;
+/* The last thing read before the button: what you do, what they get, and what
+   happens when nobody answers. Upright rather than italic - this is a plain
+   statement of the product, not an aside. */
+.land__close {
+  margin: 0 auto 0.7rem;
+  max-width: 30rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
   line-height: 1.65;
-  font-style: italic;
+}
+
+.land__close + .land__close {
+  color: var(--muted);
 }
 
 .land__foot {
