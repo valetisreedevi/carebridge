@@ -3224,13 +3224,35 @@ a.btn-primary--sm {
   letter-spacing: 0.14em;
 }
 
+/* Shaped like the thing that actually lands in an inbox: who it is from, the
+   one sentence that matters, and when it was sent. */
 .demo--alert {
-  color: var(--warn);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0 1rem;
+  text-align: left;
   font-size: 0.82rem;
-  padding: 0 0.9rem;
-  text-align: center;
-  flex-wrap: wrap;
-  justify-content: center;
+  color: var(--ink-soft);
+}
+
+.demo--alert strong {
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.demo__from {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.demo__when {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

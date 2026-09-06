@@ -611,15 +611,21 @@ export default function Landing() {
             index={5}
             title="You are told when it matters"
             demo={
+              /* This card is about being TOLD, so the demo shows the thing
+                 that arrives. It used to show the "ours to fix" mark, which
+                 belongs to the honesty argument and is already made twice
+                 above - so the picture was illustrating a different card than
+                 the one it sits in. */
               <div className="demo demo--alert">
-                <span className="ledger__ours">ours to fix</span>
-                <span>no reminder reached the phone</span>
+                <span className="demo__from">CareBridge</span>
+                <strong>No answer about the 8:00 PM dose</strong>
+                <span className="demo__when">emailed to you · 9:32 pm</span>
               </div>
             }
           >
-            If nobody answers, CareBridge tries again. When that goes unanswered
-            too it stops guessing and comes to you — a notification, then an
-            email — and says plainly whether the failure was theirs or ours.
+            If nobody answers, CareBridge tries again — and when that goes
+            unanswered too it stops guessing and comes to you, saying plainly
+            whether the failure was theirs or ours.
           </Feature>
         </ul>
       </section>
