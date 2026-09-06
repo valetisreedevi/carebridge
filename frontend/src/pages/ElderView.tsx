@@ -196,6 +196,9 @@ export default function ElderView() {
 
   const stopListening = useRef<() => void>(() => {});
   const playedFor = useRef<string | null>(null);
+  // Set synchronously, before the await, so two taps in the same instant
+  // cannot both get past the check and restart the message mid-sentence.
+  const voiceBusy = useRef(false);
 
   // The language belongs to whoever this reminder is for, not to the phone.
   // A device shared by a Telugu speaker and an English speaker shows each of
@@ -426,7 +429,11 @@ export default function ElderView() {
    */
   const playFamilyVoice = useCallback(async () => {
     if (!audioUrl) return;
+    // She taps again because she is not sure it is playing. Restarting it is
+    // the one answer that guarantees she never hears the end of it.
+    if (voiceBusy.current) return;
 
+    voiceBusy.current = true;
     setVoicePlaying(true);
     // The shared element, not a new one: a fresh Audio() is a fresh element
     // that no gesture ever unlocked, which is why the recording used to play
@@ -437,11 +444,19 @@ export default function ElderView() {
       setHeardVoice(true);
       setNotice((current) => (current === "tapToHear" ? null : current));
     } else {
+      voiceBusy.current = false;
       setVoicePlaying(false);
     }
   }, [audioUrl]);
 
-  useEffect(() => whenVoiceEnds(() => setVoicePlaying(false)), []);
+  useEffect(
+    () =>
+      whenVoiceEnds(() => {
+        voiceBusy.current = false;
+        setVoicePlaying(false);
+      }),
+    [],
+  );
 
   // The caregiver's voice plays once per reminder, not on every poll.
   useEffect(() => {
@@ -615,10 +630,19 @@ export default function ElderView() {
     // The tap the notice asks for. On the whole screen rather than a button,
     // because "tap anywhere" has to mean anywhere to somebody holding the
     // phone at arm's length. Harmless when there is nothing waiting to play.
+    //
+    // Anywhere means anywhere EXCEPT a control. Every button on this screen
+    // sits inside this handler, so without the guard below, answering the
+    // reminder also replayed the recording - and pressing the microphone
+    // played the family's voice straight into an open recogniser, which then
+    // heard the recording instead of her. Guarding here rather than with
+    // stopPropagation on each button, because that had already been missed
+    // three times out of four and the next button added would miss it too.
     <main
       className="elder"
-      onClick={() => {
+      onClick={(event) => {
         unlockAudio();
+        if ((event.target as HTMLElement).closest("button")) return;
         void playFamilyVoice();
       }}
     >
