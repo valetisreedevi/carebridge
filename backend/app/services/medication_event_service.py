@@ -392,15 +392,38 @@ class MedicationEventService:
         MedicationEventStatus.SNOOZED.value,
     })
 
-    def list_open_events_for_elder(self, elder_id: str) -> list[dict]:
+    def list_open_events_for_elder(
+        self,
+        elder_id: str,
+        live_within: timedelta | None = None,
+        now: datetime | None = None,
+    ) -> list[dict]:
         """Every reminder still waiting on an answer, earliest first.
 
         A morning is rarely one tablet. Returning only the latest hid the rest
         from the elder while they kept counting down towards escalation.
+
+        `live_within` is how long after its scheduled time a dose is still the
+        thing the elder is being asked about. Without it a reminder is open
+        until something closes it, and the only things that close one are an
+        answer from the elder or the worker deciding it is exhausted. A dose
+        raised while no phone was paired has neither, so it stayed open for
+        ever and was handed to the next device to pair — which then rang about
+        eye drops from hours ago the moment it finished pairing. Waiting on a
+        worker to tidy up is not an answer either: it does not run while the
+        scheduler is paused, and a read this important should not be able to
+        return yesterday because a cron job is off.
         """
-        events = [
-            e for e in self._for_elder(elder_id) if e["status"] in self.OPEN_STATUSES
-        ]
+        now = now or datetime.now(timezone.utc)
+
+        def still_live(event: dict) -> bool:
+            if event["status"] not in self.OPEN_STATUSES:
+                return False
+            if live_within is None:
+                return True
+            return now < event["scheduled_at"] + live_within
+
+        events = [e for e in self._for_elder(elder_id) if still_live(e)]
         return sorted(events, key=lambda e: e["scheduled_at"])
 
     def list_events_for_elder_between(
@@ -414,7 +437,11 @@ class MedicationEventService:
         ]
         return sorted(events, key=lambda e: e["scheduled_at"])
 
-    def get_active_event_for_elder(self, elder_id: str) -> dict | None:
+    def get_active_event_for_elder(
+        self,
+        elder_id: str,
+        live_within: timedelta | None = None,
+    ) -> dict | None:
         """The one the elder is asked about first."""
-        events = self.list_open_events_for_elder(elder_id)
+        events = self.list_open_events_for_elder(elder_id, live_within=live_within)
         return events[0] if events else None

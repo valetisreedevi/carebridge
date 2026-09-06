@@ -68,6 +68,15 @@ fun ReminderScreen(
     onRetry: () -> Unit = {},
     playing: Boolean = false,
     onPlayAgain: () -> Unit = {},
+    /**
+     * Opened to read the day rather than to answer a dose.
+     *
+     * "Show my medicine" used to land on whatever the server called active,
+     * which meant the list was unreachable whenever there was anything to
+     * answer — and on a phone that had just been paired, that was somebody
+     * else's hours-old dose, read out loud in her family's voice.
+     */
+    showList: Boolean = false,
 ) {
     val language = state.reminder?.language
 
@@ -79,7 +88,7 @@ fun ReminderScreen(
         return
     }
 
-    val reminder = state.reminder
+    val reminder = if (showList) null else state.reminder
 
     // A phone that could not be reached is not a phone with nothing to do.
     // These used to render identically, which meant a failed wake looked to
@@ -139,34 +148,43 @@ fun ReminderScreen(
                 .padding(horizontal = 20.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Asked for the list, she is told it is the list. "Nothing due" is
+            // an answer to a question she did not ask, and it is also the
+            // sentence a failed reminder shows.
             Text(
-                Copy.nothingDue(dayLanguage),
+                if (showList) Copy.todaysMedicines(dayLanguage)
+                else Copy.nothingDue(dayLanguage),
                 fontSize = 34.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Ink,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                state.notice ?: Copy.nothingDueHint(dayLanguage),
-                fontSize = 21.sp,
-                color = Muted,
-                textAlign = TextAlign.Center,
-            )
+
+            if (!showList || doses.isEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    state.notice ?: Copy.nothingDueHint(dayLanguage),
+                    fontSize = 21.sp,
+                    color = Muted,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
             // Opening the app off-schedule used to end here, on a sentence
             // that is also what a failed reminder says. Somebody who cannot
             // remember whether they took the morning tablet is exactly who
             // this product is for.
             if (doses.isNotEmpty()) {
-                Spacer(Modifier.height(36.dp))
-                Text(
-                    Copy.todaysMedicines(dayLanguage),
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Ink,
-                )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(if (showList) 24.dp else 36.dp))
+                if (!showList) {
+                    Text(
+                        Copy.todaysMedicines(dayLanguage),
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Ink,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
                 doses.forEach { dose ->
                     DayRow(dose = dose, language = dayLanguage)
                     Spacer(Modifier.height(10.dp))

@@ -69,13 +69,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         ensureReminderChannel(this)
 
-        val paired = Pairing.load(this)
-
-        // Paired but signed out reads every reminder as "cannot reach
-        // CareBridge", because the API ignores anything without a token. Send
-        // that phone back to setup instead of on to a screen that cannot work.
-        val ready = paired != null && ApiClient.isSignedIn()
-
         // targetSdk 35 draws edge to edge regardless; this is the call that
         // makes the system bars transparent and their icons dark, so they sit
         // on the app's own paper instead of a black strip above it.
@@ -83,11 +76,30 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CareBridgeTheme {
+                // Read once into state rather than computed before setContent.
+                // Computed outside, it was decided before the code had been
+                // typed and nothing recomputed it afterwards, so a phone that
+                // paired perfectly stayed on the pairing form with a line of
+                // text under the button as its only sign anything had happened.
+                //
+                // Paired but signed out reads every reminder as "cannot reach
+                // CareBridge", because the API ignores anything without a
+                // token. That phone goes back to setup rather than on to a
+                // screen that cannot work.
+                var ready by remember {
+                    mutableStateOf(Pairing.load(this) != null && ApiClient.isSignedIn())
+                }
+
                 if (ready) ReadyScreen(
                     onShowMedicine = {
-                        startActivity(Intent(this, ReminderActivity::class.java))
+                        startActivity(
+                            Intent(this, ReminderActivity::class.java).putExtra(
+                                ReminderActivity.EXTRA_SHOW_LIST,
+                                true,
+                            ),
+                        )
                     },
-                ) else PairingScreen()
+                ) else PairingScreen(onPaired = { ready = true })
             }
         }
     }
@@ -181,7 +193,7 @@ private fun ReadyScreen(onShowMedicine: () -> Unit) {
 }
 
 @Composable
-private fun PairingScreen() {
+private fun PairingScreen(onPaired: () -> Unit) {
     val context = LocalContext.current
     var code by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
@@ -308,6 +320,12 @@ private fun PairingScreen() {
                                     else ->
                                         "Ready. This is ${reply.elderName}'s phone."
                                 }
+
+                                // Only a phone that can actually read its own
+                                // reminders moves on. The other two outcomes
+                                // stay here, where the sentence explaining what
+                                // is still wrong is.
+                                if (signedIn) onPaired()
                             }
                             paired.onFailure {
                                 status = "That code did not work. Ask for a new one."

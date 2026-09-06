@@ -68,6 +68,18 @@ class ReminderService:
         self.notifications = NotificationService(self.db)
         self.settings = get_settings()
 
+    @property
+    def live_window(self) -> timedelta:
+        """How long after its time a dose is still the elder's to answer.
+
+        The same span _is_exhausted uses to stop waiting on a snooze. It lives
+        here because escalation is this service's rule, but the elder screen
+        needs it too: without it an unanswered dose stays "happening now" until
+        a worker pass closes it, and no worker pass comes while the scheduler
+        is paused.
+        """
+        return timedelta(minutes=self.settings.escalate_after_minutes)
+
     # ---------------- pass 1: materialise ----------------
 
     def materialise_due_events(self, now: datetime) -> list[dict]:

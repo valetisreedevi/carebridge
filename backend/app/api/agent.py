@@ -37,7 +37,9 @@ async def chat(
         if not event or event["elder_id"] != elder_id:
             raise HTTPException(status_code=404, detail="Reminder not found")
     else:
-        active = deps.event_service().get_active_event_for_elder(elder_id)
+        active = deps.event_service().get_active_event_for_elder(
+            elder_id, live_within=deps.reminder_service().live_window
+        )
         event_id = active["id"] if active else None
 
     result = await AgentService().chat(

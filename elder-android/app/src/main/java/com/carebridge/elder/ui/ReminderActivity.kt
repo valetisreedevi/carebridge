@@ -26,8 +26,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.carebridge.elder.data.ApiClient
 import com.carebridge.elder.data.Pairing
+import com.carebridge.elder.data.Reminder
 import com.carebridge.elder.notify.REMINDER_NOTIFICATION_ID
 import com.carebridge.elder.ui.theme.CareBridgeTheme
+import java.time.OffsetDateTime
 import java.util.Locale
 
 /**
@@ -38,6 +40,10 @@ class ReminderActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_EVENT_ID = "event_id"
+
+        /** Opened to read today, not because anything is ringing. */
+        const val EXTRA_SHOW_LIST = "show_list"
+
         const val TAG = "CareBridge"
 
         /** Long enough to walk to the kitchen; short enough to not sit lit. */
@@ -45,6 +51,29 @@ class ReminderActivity : ComponentActivity() {
 
         /** How long the family's recording gets before we speak instead. */
         private const val AUDIO_PATIENCE_MS = 3_000L
+
+        /**
+         * How recently a dose must have rung for its recording to play by itself.
+         *
+         * Wide enough for a phone that was asleep when the notification landed
+         * and needed a moment to wake and fetch the audio; far too narrow for a
+         * dose that has simply been sitting there unanswered.
+         */
+        private const val JUST_RANG_MS = 3 * 60 * 1000L
+
+        /**
+         * Whether this dose rang a moment ago, as opposed to merely being open.
+         *
+         * A dose stays open until somebody answers it. Playing on "open" is why
+         * a freshly paired phone spoke the family's voice about eye drops from
+         * hours earlier, the instant it finished pairing.
+         */
+        internal fun justRang(reminder: Reminder, now: Long = System.currentTimeMillis()): Boolean {
+            val rangAt = reminder.lastAttemptAt ?: return false
+            val instant = runCatching { OffsetDateTime.parse(rangAt).toInstant() }.getOrNull()
+                ?: return false
+            return now - instant.toEpochMilli() < JUST_RANG_MS
+        }
     }
 
     private var tts: TextToSpeech? = null
@@ -74,6 +103,11 @@ class ReminderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Everything below that treats this as an alarm — taking the screen
+        // over, holding it awake, standing down after three unanswered minutes
+        // — is wrong for somebody who opened the app herself to read the day.
+        val showList = intent.getBooleanExtra(EXTRA_SHOW_LIST, false)
+
         // First thing, before any logging or work that could delay it. The
         // channel's tone belongs to the system and cannot be stopped any other
         // way, and until this runs it is playing over the family's recording.
@@ -81,7 +115,7 @@ class ReminderActivity : ComponentActivity() {
         // withheld — this never runs and the notification keeps ringing, which
         // is exactly the behaviour that case needs.
         dismissNotification()
-        armGiveUp()
+        if (!showList) armGiveUp()
 
         // Proof, in the log, that the phone really was asleep and locked when
         // this took over — not that someone was watching an unlocked screen.
@@ -94,8 +128,9 @@ class ReminderActivity : ComponentActivity() {
         )
 
         // The reminder is useless if the screen sleeps again halfway through
-        // the recording.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // the recording. A list she opened herself gets the phone's own
+        // timeout, or it stays lit until the battery goes.
+        if (!showList) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         Pairing.load(this)
         tts = TextToSpeech(this) { status ->
@@ -127,9 +162,17 @@ class ReminderActivity : ComponentActivity() {
                 // Keyed on the ROUND, not the current dose. Keying on the dose
                 // meant the recording restarted every time she answered one, so
                 // three tablets played the family's voice three times over.
-                LaunchedEffect(state.queue.firstOrNull()?.eventId) {
+                // Only for a dose that has just gone off, and never when the
+                // screen was opened to read the list. "There is a reminder" and
+                // "a reminder is ringing" are not the same thing: the first is
+                // true until somebody answers, and answering is exactly what
+                // nobody had done when a new phone paired and was spoken to
+                // about a dose from hours before it existed.
+                LaunchedEffect(state.queue.firstOrNull()?.eventId, showList) {
+                    if (showList) return@LaunchedEffect
                     val reminder = state.queue.firstOrNull() ?: return@LaunchedEffect
                     if (playedFor == reminder.eventId) return@LaunchedEffect
+                    if (!justRang(reminder)) return@LaunchedEffect
                     playedFor = reminder.eventId
 
                     language = reminder.language
@@ -171,6 +214,7 @@ class ReminderActivity : ComponentActivity() {
                     onRetry = model::retry,
                     playing = playing,
                     onPlayAgain = ::replayVoice,
+                    showList = showList,
                 )
 
                 LaunchedEffect(state.finished) {
@@ -179,8 +223,11 @@ class ReminderActivity : ComponentActivity() {
 
                 // Every answer buys another three minutes: a round of three
                 // tablets must not be timed out because the first two took a
-                // while.
-                LaunchedEffect(state.index) { armGiveUp() }
+                // while. Nothing is being answered on the list, so nothing
+                // there should time out.
+                LaunchedEffect(state.index, showList) {
+                    if (!showList) armGiveUp()
+                }
             }
         }
     }

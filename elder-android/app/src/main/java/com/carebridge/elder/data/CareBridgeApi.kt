@@ -36,6 +36,15 @@ data class Reminder(
     val notes: String? = null,
     val status: String? = null,
     val attempt: Int = 0,
+    /**
+     * When this last actually rang, ISO-8601, or null if it never has.
+     *
+     * Not the same as it being open: a dose stays open until somebody answers
+     * it. The family's voice belongs to the moment it goes off, so this is
+     * what tells a screen that has just been opened whether it is the phone
+     * ringing or just a dose nobody has got to yet.
+     */
+    @Json(name = "last_attempt_at") val lastAttemptAt: String? = null,
     @Json(name = "elder_language") val language: String? = null,
     @Json(name = "photo_url") val photoUrl: String? = null,
     @Json(name = "caregiver_audio_url") val caregiverAudioUrl: String? = null,

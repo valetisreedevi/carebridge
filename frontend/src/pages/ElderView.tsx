@@ -22,6 +22,21 @@ import PairDevice from "./PairDevice";
 
 const POLL_MS = 15000;
 
+/**
+ * How recently a reminder must have rung for its recording to play by itself.
+ *
+ * Wide enough to cover a phone that was asleep when the notification arrived
+ * and took a moment to wake, catch up and load the audio; far too narrow for a
+ * dose that has simply been sitting unanswered.
+ */
+const JUST_RANG_MS = 3 * 60 * 1000;
+
+const justRang = (reminder: Reminder): boolean => {
+  if (!reminder.last_attempt_at) return false;
+  const rangAt = Date.parse(reminder.last_attempt_at);
+  return Number.isFinite(rangAt) && Date.now() - rangAt < JUST_RANG_MS;
+};
+
 type Turn = { who: "elder" | "carebridge"; text: string };
 
 /** Resolving means Firebase has not yet said whether this device is paired. */
@@ -465,14 +480,25 @@ export default function ElderView() {
     [],
   );
 
-  // The caregiver's voice plays once per reminder, not on every poll.
-  useEffect(() => {
-    if (!audioUrl || !reminder) return;
-    if (playedFor.current === reminder.event_id) return;
+  // The caregiver's voice plays once per reminder, not on every poll, and only
+  // for a reminder that has just this moment gone off.
+  //
+  // "There is a reminder on screen" and "a reminder just rang" are not the same
+  // thing. A dose stays open until somebody answers it, so opening this screen
+  // an hour later — or pairing a new phone, which is how this was found — used
+  // to be enough to play the family's recording at whoever was holding it. The
+  // voice belongs to the moment the dose is due. Any other time she can press
+  // Hear family, and it is her choice.
+  const autoplayFor =
+    audioUrl && reminder && justRang(reminder) ? reminder.event_id : null;
 
-    playedFor.current = reminder.event_id;
+  useEffect(() => {
+    if (!autoplayFor) return;
+    if (playedFor.current === autoplayFor) return;
+
+    playedFor.current = autoplayFor;
     void playFamilyVoice();
-  }, [audioUrl, reminder, playFamilyVoice]);
+  }, [autoplayFor, playFamilyVoice]);
 
   /**
    * Says it out loud, in her own language.
@@ -703,6 +729,12 @@ export default function ElderView() {
         // Once per reminder. The tap is here to rescue a recording that played
         // to an empty room, and heardVoice cannot tell that case apart - the
         // autoplay sets it whether or not anybody was standing there.
+        //
+        // Only for a reminder that just rang, for the same reason the autoplay
+        // is: this fires on any tap anywhere on the screen, so on an older dose
+        // it is not a request to hear anything. The Hear family button below is
+        // always there for that.
+        if (!justRang(reminder)) return;
         if (tapPlayedFor.current === reminder.event_id) return;
         tapPlayedFor.current = reminder.event_id;
         void playFamilyVoice();

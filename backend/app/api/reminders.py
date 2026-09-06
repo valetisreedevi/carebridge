@@ -57,6 +57,11 @@ def _present(event: dict, medication: dict, elder: dict | None = None) -> dict:
         "attempt": event.get("attempt", 0),
         "max_attempts": event.get("max_attempts"),
         "scheduled_at": event["scheduled_at"],
+        # When it last actually rang, which is not the same as it being open.
+        # A screen opening on a reminder that is merely still unanswered must
+        # not play the family's voice at her; a screen opening because one just
+        # went off should. Only this field separates the two.
+        "last_attempt_at": event.get("last_attempt_at"),
         "photo_url": photo_url or (
             f"/api/reminders/{event['id']}/image" if photo else None
         ),
@@ -80,7 +85,9 @@ def get_active_reminder(elder_id: str = Depends(current_elder_id)):
     elder = firestore.get_elder(elder_id)
 
     presented = []
-    for event in deps.event_service().list_open_events_for_elder(elder_id):
+    for event in deps.event_service().list_open_events_for_elder(
+        elder_id, live_within=deps.reminder_service().live_window
+    ):
         medication = firestore.get_medication(event["medication_id"])
         if medication and medication.get("active", True):
             presented.append(_present(event, medication, elder))

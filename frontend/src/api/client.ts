@@ -344,6 +344,10 @@ export type Reminder = {
   notes: string | null;
   status: string;
   attempt: number;
+  /** When this last actually rang, ISO-8601. Not the same as it being open:
+   *  a dose stays open until it is answered, and the family's voice belongs to
+   *  the moment it went off, not to every screen that opens afterwards. */
+  last_attempt_at: string | null;
   photo_url: string | null;
   caregiver_audio_url: string | null;
   has_photo: boolean;

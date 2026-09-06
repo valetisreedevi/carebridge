@@ -396,6 +396,66 @@ def test_a_removed_medication_disappears_from_the_elders_queue(client, db):
     assert body["reminders"] == []
 
 
+def test_a_dose_from_hours_ago_is_no_longer_what_the_screen_is_asking(client, db):
+    """A phone that pairs at noon must not be rung about the eight o'clock dose.
+
+    An open reminder used to mean "happening now" with no reference to the
+    clock, so a dose raised while nobody had a phone yet stayed open for ever
+    and was handed to the next device to pair, which played the family's voice
+    at whoever was holding it.
+    """
+    from datetime import datetime, timedelta, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    long_ago = datetime.now(tz.utc) - timedelta(hours=3)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=long_ago,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, long_ago)
+
+    body = client.get(
+        "/api/reminders/active", headers={"X-Elder-Id": elder_id}
+    ).json()
+
+    assert body["active"] is False
+    assert body["reminders"] == []
+
+
+def test_a_dose_that_just_rang_says_when_it_rang(client, db):
+    """The screen cannot tell "still unanswered" from "just went off" without it."""
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, now)
+
+    body = client.get(
+        "/api/reminders/active", headers={"X-Elder-Id": elder_id}
+    ).json()
+
+    assert body["active"] is True
+    assert body["reminders"][0]["last_attempt_at"] is not None
+
+
 def test_the_elders_own_phone_can_ask_for_the_whole_day(client):
     """Opening the app off-schedule used to say only "nothing right now".
 
