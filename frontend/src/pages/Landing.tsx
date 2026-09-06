@@ -245,10 +245,11 @@ export default function Landing() {
           </h1>
           <p className="land__lede">
             CareBridge is two halves of one thing. You set up the medicines and
-            record a reminder in <em>your</em> own voice. The person you look
-            after gets a phone that wakes itself at the right time and plays it
-            — nothing to open, nothing to read, no app to learn. Then you see
-            what actually happened, so you never have to ring and ask.
+            record a reminder in <em>your</em> own voice. CareBridge goes on
+            their phone once — after that they never open it. At the right time
+            it wakes itself and plays your voice: nothing to tap, nothing to
+            read, nothing to remember. Then you see what actually happened, so
+            you never have to ring and ask.
           </p>
           <div className="land__cta">
             <Link className="btn-primary" to="/signin">
@@ -295,7 +296,8 @@ export default function Landing() {
             <p>
               Even locked, even face-down, their phone plays the message you
               recorded — in their own language, beside a photograph of the
-              tablet.
+              tablet. It installs once on an Android phone, and they never have
+              to open it again.
             </p>
           </Reveal>
           <Reveal as="li" delay={220}>
@@ -319,28 +321,48 @@ export default function Landing() {
 
         <div className="show__pair">
           <figure className="show__side">
-            <div className="show__phone">
+            {/* The mock is decoration; the caption below it is the content. So
+                the phone is hidden from assistive tech and its buttons are
+                taken out of the tab order - a keyboard user was landing on
+                three controls that do nothing - while the caption still
+                reads. */}
+            <div className="show__phone" aria-hidden="true">
               <div className="show__elder">
                 <p className="elder__title">Medicine time</p>
                 <div className="show__photo pill pill--teal" aria-hidden="true" />
                 <p className="elder__medicine">Amlodipine</p>
                 <p className="elder__dose">1 tablet</p>
                 <p className="elder__food">after food</p>
-                <button className="elder__voice elder__voice--on" type="button">
+                <button
+                  className="elder__voice elder__voice--on"
+                  type="button"
+                  tabIndex={-1}
+                >
                   <span className="elder__voiceMark">▶</span> Hear family
                 </button>
-                <button className="elder__button elder__button--taken" type="button">
+                <button className="elder__mic" type="button" tabIndex={-1}>
+                  Speak to CareBridge
+                </button>
+                <button
+                  className="elder__button elder__button--taken"
+                  type="button"
+                  tabIndex={-1}
+                >
                   I took it
                 </button>
-                <button className="elder__button elder__button--later" type="button">
+                <button
+                  className="elder__button elder__button--later"
+                  type="button"
+                  tabIndex={-1}
+                >
                   Remind me later
                 </button>
               </div>
             </div>
             <figcaption>
-              <strong>What they see.</strong> A photograph of the tablet, one
-              enormous button, and your voice on tap. Nothing to read, nothing
-              to scroll, no way to get lost.
+              <strong>What they see.</strong> A photograph of the tablet, your
+              voice on tap, and two ways to answer — a button, or just saying
+              it out loud. Nothing to scroll, no way to get lost.
             </figcaption>
           </figure>
 
@@ -432,6 +454,19 @@ export default function Landing() {
             dose that was never delivered — a phone that was off, a reminder
             that never arrived — is marked as ours to fix, not as a dose
             somebody declined to take.
+          </p>
+          <p className="land__fineprint">
+            Your recording, the photographs of the medicines and the record of
+            who answered stay inside your own account. They are used to send
+            the reminders and to show you this page, and for nothing else — not
+            sold, not advertised against, not shared with anyone you have not
+            invited to the care team. You can delete a medicine, and its
+            recording goes with it.
+          </p>
+          <p className="land__fineprint">
+            <strong>CareBridge reminds. It does not advise, diagnose, or
+            replace a doctor.</strong> The schedule is the one you enter, and
+            it is only ever as right as the prescription you were given.
           </p>
         </div>
 
@@ -595,6 +630,9 @@ export default function Landing() {
           CareBridge
         </span>
         <span>Medicine reminders in your family's own voice.</span>
+        <span className="land__fineprint">
+          Not a medical device. <a href="#honest">What we do with your data</a>.
+        </span>
       </footer>
     </main>
   );

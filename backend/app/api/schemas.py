@@ -133,6 +133,18 @@ class AgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
+class SpeakRequest(BaseModel):
+    """Words the screen is about to show, to be said out loud as well.
+
+    The same 1000-character ceiling AgentChatRequest puts on her side of the
+    conversation. It is also comfortably inside the Cloud limit, which Telugu
+    reaches roughly three times faster than English does.
+    """
+
+    text: str = Field(min_length=1, max_length=1000)
+    language: str = Field(default="en", max_length=8)
+
+
 class MarkTakenRequest(BaseModel):
     """Which of a medicine's scheduled times the caregiver is closing."""
 

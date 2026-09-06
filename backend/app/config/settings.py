@@ -19,6 +19,12 @@ class Settings(BaseSettings):
 
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    # Her replies are spoken by Google rather than by whichever voices the
+    # handset happens to own. Off is a supported state: the screen falls back
+    # to the browser's own synthesiser, which is right for English and merely
+    # audible for everything else.
+    tts_enabled: bool = os.getenv("TTS_ENABLED", "true").lower() == "true"
+
     # When false the API trusts the X-Caregiver-Id header instead of a
     # Firebase ID token. Local development and demos only.
     auth_enabled: bool = os.getenv("AUTH_ENABLED", "false").lower() == "true"

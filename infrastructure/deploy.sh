@@ -45,6 +45,7 @@ gcloud services enable \
   secretmanager.googleapis.com \
   fcm.googleapis.com \
   identitytoolkit.googleapis.com \
+  texttospeech.googleapis.com \
   --project "$PROJECT_ID"
 
 echo "==> Service accounts"

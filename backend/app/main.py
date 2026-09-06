@@ -12,6 +12,7 @@ from app.api import (
     medications,
     pairing,
     reminders,
+    speech,
 )
 from app.config import get_settings
 from app.models.medication_event import InvalidTransition
@@ -41,6 +42,7 @@ app.include_router(medications.router)
 app.include_router(pairing.router)
 app.include_router(reminders.router)
 app.include_router(agent.router)
+app.include_router(speech.router)
 app.include_router(internal.router)
 
 

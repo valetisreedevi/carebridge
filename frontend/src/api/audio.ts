@@ -78,6 +78,17 @@ export async function playVoice(url: string): Promise<boolean> {
   }
 }
 
+/** Stops whatever this element is saying, so the microphone does not hear it.
+ *
+ * CareBridge's own replies come out of here now rather than out of the
+ * browser's synthesiser, which means stopSpeaking() no longer silences them.
+ * Without this, opening the microphone would leave CareBridge talking into it
+ * and the recogniser would write CareBridge's sentence down as hers.
+ */
+export function stopVoice(): void {
+  shared().pause();
+}
+
 /** So the screen can show "playing" honestly rather than guessing. */
 export function whenVoiceEnds(onEnd: () => void): () => void {
   const audio = shared();

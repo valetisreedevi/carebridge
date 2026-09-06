@@ -6,6 +6,7 @@ from app.services.firestore_service import FirestoreService
 from app.services.medication_event_service import MedicationEventService
 from app.services.notification_service import NotificationService
 from app.services.reminder_service import ReminderService
+from app.services.speech_service import SpeechService
 from app.services.storage_service import StorageService
 
 
@@ -32,6 +33,11 @@ def reminder_service() -> ReminderService:
 @lru_cache
 def storage_service() -> StorageService:
     return StorageService()
+
+
+@lru_cache
+def speech_service() -> SpeechService:
+    return SpeechService()
 
 
 @lru_cache

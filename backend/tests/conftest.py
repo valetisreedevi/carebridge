@@ -127,6 +127,7 @@ def client(db, monkeypatch):
         ("reminder_service", lambda: ReminderService(db)),
         ("conversation_service", lambda: ConversationService(db)),
         ("storage_service", lambda: None),
+        ("speech_service", lambda: None),
     ):
         monkeypatch.setattr(deps, name, factory)
 

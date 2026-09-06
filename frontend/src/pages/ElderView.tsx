@@ -15,7 +15,7 @@ import {
   watchForegroundReminders,
   type PushState,
 } from "../api/push";
-import { playVoice, unlockAudio, whenVoiceEnds } from "../api/audio";
+import { playVoice, stopVoice, unlockAudio, whenVoiceEnds } from "../api/audio";
 import { listen, speak, speechSupported, speechTag, stopSpeaking } from "../api/voice";
 import { t, tFood, tTemplate, type StringKey } from "../i18n";
 import PairDevice from "./PairDevice";
@@ -199,6 +199,13 @@ export default function ElderView() {
   // Set synchronously, before the await, so two taps in the same instant
   // cannot both get past the check and restart the message mid-sentence.
   const voiceBusy = useRef(false);
+  // Tapping the screen rescues a recording that played to an empty room. It
+  // does that once per reminder: after that a resting thumb is an accident,
+  // and the button beside it replays as often as she likes.
+  const tapPlayedFor = useRef<string | null>(null);
+  // Revoked when the next thing is said rather than the moment this one
+  // starts, because an element playing a blob still needs the blob.
+  const spokenUrl = useRef<string | null>(null);
 
   // The language belongs to whoever this reminder is for, not to the phone.
   // A device shared by a Telugu speaker and an English speaker shows each of
@@ -467,12 +474,58 @@ export default function ElderView() {
     void playFamilyVoice();
   }, [audioUrl, reminder, playFamilyVoice]);
 
+  /**
+   * Says it out loud, in her own language.
+   *
+   * The handset's own voices are the whole problem. A Windows laptop has
+   * three and all of them are en-US; asked for Telugu it reads the Latin
+   * characters and the digits and passes over the script without complaining,
+   * so a sentence about eye drops at 7:35 arrives as "eye drops 7:35" and
+   * nothing anywhere reports a failure. The sound is made on the server now,
+   * where the voice always exists.
+   *
+   * The browser is still the fallback: correct for English, wrong but audible
+   * otherwise, and better than the silence it would replace.
+   */
+  const speakAloud = useCallback(
+    async (text: string) => {
+      stopSpeaking();
+
+      if (spokenUrl.current) URL.revokeObjectURL(spokenUrl.current);
+      spokenUrl.current = null;
+
+      const speaker = reminder?.elder_id ?? elderId;
+      const url = speaker
+        ? await api.speech(speaker, text, lang).catch(() => null)
+        : null;
+
+      if (!url) {
+        speak(text, speechTag(lang));
+        return;
+      }
+
+      spokenUrl.current = url;
+
+      // The same element the family's recording uses, so only one voice is
+      // ever heard at once. Setting .src cuts that recording off without
+      // firing "ended", which would otherwise leave these two stuck and the
+      // "Hear family" button disabled for the rest of the reminder.
+      voiceBusy.current = false;
+      setVoicePlaying(false);
+
+      if (!(await playVoice(url))) speak(text, speechTag(lang));
+    },
+    [reminder, elderId, lang],
+  );
+
   const say = useCallback(
     (text: string) => {
+      // Appended synchronously, so the words land on screen exactly when they
+      // did before. Only the sound is waited for.
       setTurns((previous) => [...previous, { who: "carebridge", text }]);
-      speak(text, speechTag(lang));
+      void speakAloud(text);
     },
-    [lang],
+    [speakAloud],
   );
 
   const send = useCallback(
@@ -508,6 +561,10 @@ export default function ElderView() {
     }
 
     stopSpeaking();
+    // Both, now. The reply may have come from the server rather than from the
+    // browser, and a recogniser opened over the top of it writes CareBridge's
+    // own sentence down as hers.
+    stopVoice();
     setListening(true);
     setNotice(null);
 
@@ -643,6 +700,11 @@ export default function ElderView() {
       onClick={(event) => {
         unlockAudio();
         if ((event.target as HTMLElement).closest("button")) return;
+        // Once per reminder. The tap is here to rescue a recording that played
+        // to an empty room, and heardVoice cannot tell that case apart - the
+        // autoplay sets it whether or not anybody was standing there.
+        if (tapPlayedFor.current === reminder.event_id) return;
+        tapPlayedFor.current = reminder.event_id;
         void playFamilyVoice();
       }}
     >

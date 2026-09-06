@@ -2802,6 +2802,15 @@ textarea:focus {
   line-height: 1.65;
 }
 
+/* Quieter than the argument above it, and deliberately still here: what
+   happens to a recording of your mother's voice is not a footnote, but it is
+   not the first thing to say either. */
+.land__fineprint {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 .land__ledger {
   padding: 1.4rem 1.5rem;
   border-radius: var(--radius);

@@ -573,6 +573,37 @@ export const api = {
     return URL.createObjectURL(await response.blob());
   },
 
+  /** The words on the screen, spoken by Google rather than by whichever voices
+   *  this handset happens to have installed.
+   *
+   *  A laptop with no Telugu voice does not refuse the sentence - it reads the
+   *  digits, skips the script, and reports success. Asking the server removes
+   *  the handset from the question entirely.
+   */
+  speech: async (
+    elderId: string,
+    text: string,
+    language: string,
+  ): Promise<string> => {
+    const token = firebaseConfigured ? await elderIdToken(elderId) : null;
+    const response = await fetch(`${API_URL}/api/speech`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : { "X-Elder-Id": elderId }),
+      },
+      body: JSON.stringify({ text, language }),
+      // A voice that has not arrived in four seconds is no longer an answer to
+      // what she just asked. The browser's own gets the rest of the turn.
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) throw new ApiError(response.status, "Could not speak");
+
+    return URL.createObjectURL(await response.blob());
+  },
+
   mediaObjectUrl: async (path: string, elderId: string): Promise<string> => {
     if (path.startsWith("http")) return path;
 
