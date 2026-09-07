@@ -2711,23 +2711,25 @@ textarea:focus {
   color: var(--brand);
 }
 
-.phone__pill {
-  position: relative;
+/* The same photograph the screen below shows, at the size the hero can spare.
+   It replaced a drawn square: a placeholder in the first handset a visitor
+   sees, directly above the real thing, made the page look like it was still
+   deciding what the product was. */
+.phone__shot {
   width: 5.5rem;
-  height: 5.5rem;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
   border-radius: 1.4rem;
-  background: var(--brand-soft);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   margin-bottom: 1rem;
+  opacity: 0;
+  transition: opacity 420ms ease;
 }
 
-.phone__pill::after {
-  content: "";
-  position: absolute;
-  inset: 34% 24%;
-  border-radius: 999px;
-  background: var(--brand);
-  opacity: 0.55;
+/* Dark until the handset wakes, like everything else on that screen. */
+.phone--awake .phone__shot {
+  opacity: 1;
 }
 
 .phone__name {
@@ -2735,6 +2737,14 @@ textarea:focus {
   font-size: 1.5rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+/* On its own line, because "Vitamin C 500 mg" wrapped after the number and
+   left a stranded "mg" - and because this is how the real screen stacks it. */
+.phone__strength {
+  margin: 0.1rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .phone__dose {
@@ -3718,21 +3728,26 @@ body {
 
 /* Dark until it wakes itself. The colour change is the whole point of the
    first two steps, so it gets a slower transition than anything else here. */
+/* The bezel is the BORDER, not a wrapper element: it stays dark in both
+   states while the background behind it is the screen going from off to on.
+   Same thickness, radius and shadow as the hero handset, so the page shows one
+   device rather than two things that happen to be phone-shaped. */
 .journey__phone {
   min-height: 22rem;
   display: flex;
   flex-direction: column;
   padding: 1.1rem 1rem 1.4rem;
-  border-radius: 22px;
-  background: #14100e;
-  border: 1px solid #14100e;
-  box-shadow: var(--shadow);
-  transition: background-color 420ms ease, border-color 420ms ease;
+  border-radius: 2.4rem;
+  background: #15120f;
+  border: 0.55rem solid #1f1a17;
+  box-shadow:
+    0 2px 4px rgba(31, 26, 23, 0.18),
+    0 40px 70px -40px rgba(31, 26, 23, 0.75);
+  transition: background-color 420ms ease;
 }
 
 .journey__phone--awake {
   background: var(--card);
-  border-color: var(--line);
 }
 
 .journey__clock {

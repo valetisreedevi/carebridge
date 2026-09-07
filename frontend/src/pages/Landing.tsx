@@ -204,8 +204,15 @@ function Phone() {
       <div className="phone__body">
         <div className="phone__screen">
           <p className="phone__label">MEDICINE TIME</p>
-          <div className="phone__pill" />
-          <p className="phone__name">Vitamin C 500 mg</p>
+          <img
+            className="phone__shot"
+            src="/medicine-vitamin-c.jpg"
+            alt=""
+            width="447"
+            height="447"
+          />
+          <p className="phone__name">Vitamin C</p>
+          <p className="phone__strength">500 mg</p>
           <p className="phone__dose">1 tablet · after food</p>
           <div className="phone__voice">
             <span className="phone__wave" />
