@@ -807,20 +807,13 @@ export default function ElderView() {
         <p className="elder__notice">{t("offlineAnswer", lang)}</p>
       )}
 
-      {speechSupported && (
-        <button
-          type="button"
-          className={`elder__mic ${listening ? "elder__mic--on" : ""}`}
-          onClick={toggleMic}
-          disabled={busy}
-        >
-          {t(
-            listening ? "listening" : busy ? "oneMoment" : "speakToCareBridge",
-            lang,
-          )}
-        </button>
-      )}
-
+      {/* The answer comes first.
+       *
+       * The microphone used to sit above these two, which put "I took it" -
+       * the thing almost everybody opens this screen to press - about ninety
+       * pixels further down and, on a real handset, below the bottom of the
+       * screen. Speaking to CareBridge is the richer way to answer and the
+       * rarer one; it belongs after the button that ends the job in one tap. */}
       <button
         type="button"
         className="elder__button elder__button--taken"
@@ -838,6 +831,20 @@ export default function ElderView() {
       >
         {t("remindMeLater", lang)}
       </button>
+
+      {speechSupported && (
+        <button
+          type="button"
+          className={`elder__mic ${listening ? "elder__mic--on" : ""}`}
+          onClick={toggleMic}
+          disabled={busy}
+        >
+          {t(
+            listening ? "listening" : busy ? "oneMoment" : "speakToCareBridge",
+            lang,
+          )}
+        </button>
+      )}
     </main>
   );
 }

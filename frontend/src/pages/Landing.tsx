@@ -366,7 +366,7 @@ function DoseJourney() {
               </div>
             )}
           </div>
-          <figcaption>Her phone</figcaption>
+          <figcaption>Their phone</figcaption>
         </figure>
 
         <figure className="journey__side" aria-hidden="true">
@@ -391,7 +391,7 @@ function DoseJourney() {
                       ? "Later today"
                       : "Waiting for a reply"}
                   {stage >= 1 && !done && <small>reminder 1 of 2</small>}
-                  {done && <small>she answered on her phone</small>}
+                  {done && <small>they answered on their phone</small>}
                 </span>
               </li>
             </ul>
@@ -565,18 +565,18 @@ export default function Landing() {
         <Reveal as="p" className="cases__lede" delay={80}>
           Four different things get written down as one word by every other
           reminder app. They are not the same thing, and only one of them is
-          about her at all.
+          about them at all.
         </Reveal>
 
         <ul className="cases__list">
           <Reveal as="li" delay={0}>
-            <span className="cases__mark cases__mark--her" aria-hidden="true" />
-            <strong>She forgot.</strong>
+            <span className="cases__mark cases__mark--them" aria-hidden="true" />
+            <strong>They forgot.</strong>
             <span>The one case everybody assumes.</span>
           </Reveal>
           <Reveal as="li" delay={90}>
             <span className="cases__mark cases__mark--wait" aria-hidden="true" />
-            <strong>She heard it, and hasn&rsquo;t answered yet.</strong>
+            <strong>They heard it, and haven&rsquo;t answered yet.</strong>
             <span>Still open. Nobody has failed.</span>
           </Reveal>
           <Reveal as="li" delay={180}>
@@ -586,7 +586,7 @@ export default function Landing() {
           </Reveal>
           <Reveal as="li" delay={270}>
             <span className="cases__mark cases__mark--ours" aria-hidden="true" />
-            <strong>It never reached her.</strong>
+            <strong>It never reached them.</strong>
             <span>Ours to fix, and we say so.</span>
           </Reveal>
         </ul>
@@ -622,7 +622,7 @@ export default function Landing() {
         </Reveal>
         <Reveal as="p" className="cases__lede" delay={80}>
           Most people carrying this are carrying it for more than one person.
-          Mom&rsquo;s morning, Dad&rsquo;s evening, and a grandmother who is
+          Mom&rsquo;s morning, Dad&rsquo;s evening, and a grandparent who is
           doing fine — in one place, so the day starts with who needs you rather
           than with a list.
         </Reveal>
@@ -722,7 +722,7 @@ export default function Landing() {
         {/* The whole argument of the product, in one panel. */}
         <Reveal className="ours" delay={300}>
           <p className="ours__count">
-            <Tally to={2} /> doses never reached her.
+            <Tally to={2} /> doses never reached them.
           </p>
           <p className="ours__badge">
             <span className="ledger__ours">ours to fix</span>
@@ -730,8 +730,8 @@ export default function Landing() {
           <p className="ours__say">
             Not a missed dose. A reminder that never arrived — the phone was
             off, or flat, or had never been set up. CareBridge does not put that
-            on her, and it does not quietly round it into a number that looks
-            like she forgot.
+            on them, and it does not quietly round it into a number that looks
+            like they forgot.
           </p>
         </Reveal>
       </section>
@@ -742,7 +742,7 @@ export default function Landing() {
           <Reveal as="h2">The same day, on your dashboard.</Reveal>
           <p>
             Not a picture of the product — the product&rsquo;s own markup and
-            stylesheet, filled with a plausible day. The green is what she
+            stylesheet, filled with a plausible day. The green is what they
             answered, the amber is still waiting, and the hatched piece is the
             part we never delivered.
           </p>
@@ -908,7 +908,7 @@ export default function Landing() {
         </Reveal>
         <Reveal as="p" className="cases__lede" delay={80}>
           A dose nobody answers is not marked missed and forgotten. It is tried
-          again, and then it becomes your problem to know about rather than hers
+          again, and then it becomes your problem to know about rather than theirs
           to have failed at.
         </Reveal>
 
@@ -916,7 +916,7 @@ export default function Landing() {
           <Reveal as="li" delay={0}>
             <span className="trail__when">8:00 pm</span>
             <strong>The reminder goes out</strong>
-            <span>Her phone wakes and plays your voice.</span>
+            <span>Their phone wakes and plays your voice.</span>
           </Reveal>
           <Reveal as="li" delay={90}>
             <span className="trail__when">no answer</span>
@@ -955,7 +955,7 @@ export default function Landing() {
           </Reveal>
           <Reveal as="li" delay={90}>
             <strong>Medicine photographs</strong>
-            <span>Stored inside your account, shown on her screen at the dose.</span>
+            <span>Stored inside your account, shown on their screen at the dose.</span>
           </Reveal>
           <Reveal as="li" delay={180}>
             <strong>Who can see it</strong>
