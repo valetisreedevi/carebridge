@@ -3868,3 +3868,833 @@ body {
     gap: 2rem;
   }
 }
+
+/* ============================================================
+   THE DOSE JOURNEY  +  nav  +  hero lift
+
+   New names only. The journey's right-hand pane reuses the real
+   .schedule__row / .schedule__* classes on purpose - that is the
+   page's established method - but every rule below is either a new
+   class or a SCOPED descendant. Nothing here edits a bare product
+   rule, so the elder's phone and the caregiver dashboard cannot move.
+   ============================================================ */
+
+.land__nav {
+  display: flex;
+  gap: 1.6rem;
+  margin-left: auto;
+  margin-right: 1.6rem;
+}
+
+.land__nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.97rem;
+  font-weight: 500;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.land__nav a:hover {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+/* The first line under the headline carries the promise, so it is set
+   in the human face and a size up from the paragraph that follows. */
+.land__lede--lift {
+  font-family: var(--font-human);
+  font-size: 1.32rem;
+  color: var(--ink);
+}
+
+.land__moment {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 3rem;
+}
+
+.journey__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+
+.journey__replay {
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--brand-ink);
+  border-radius: 999px;
+  padding: 0.42rem 1.05rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 140ms ease;
+}
+
+.journey__replay:hover {
+  border-color: var(--brand);
+  transform: translateY(-1px);
+}
+
+.journey__replay:active {
+  transform: translateY(0);
+}
+
+/* The five steps. A rail behind them, filled as far as the current step,
+   so the row reads as progress rather than as five tabs. */
+.journey__stages {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.journey__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.2rem 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: color 160ms ease;
+}
+
+.journey__stageDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--line-strong);
+  transition: background-color 200ms ease, border-color 200ms ease,
+    transform 200ms ease;
+}
+
+.journey__stage--past { color: var(--ink-soft); }
+
+.journey__stage--past .journey__stageDot {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.journey__stage--on { color: var(--brand-ink); }
+
+.journey__stage--on .journey__stageDot {
+  background: var(--brand);
+  border-color: var(--brand);
+  transform: scale(1.25);
+}
+
+.journey__pair {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.journey__side { margin: 0; }
+
+.journey__side figcaption {
+  margin-top: 0.7rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Dark until it wakes itself. The colour change is the whole point of the
+   first two steps, so it gets a slower transition than anything else here. */
+.journey__phone {
+  min-height: 22rem;
+  display: flex;
+  flex-direction: column;
+  padding: 1.1rem 1rem 1.4rem;
+  border-radius: 22px;
+  background: #14100e;
+  border: 1px solid #14100e;
+  box-shadow: var(--shadow);
+  transition: background-color 420ms ease, border-color 420ms ease;
+}
+
+.journey__phone--awake {
+  background: var(--card);
+  border-color: var(--line);
+}
+
+.journey__clock {
+  margin: 0;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #6d635c;
+  transition: color 420ms ease;
+}
+
+.journey__phone--awake .journey__clock { color: var(--muted); }
+
+.journey__asleep {
+  margin: auto;
+  color: #4a423c;
+  font-size: 0.95rem;
+}
+
+.journey__screen,
+.journey__calm {
+  margin: auto 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: journeyIn 320ms ease both;
+}
+
+.journey__calm { margin: auto 0; gap: 0.6rem; }
+
+.journey__tick {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--good-bg);
+  color: var(--good);
+  font-size: 1.5rem;
+}
+
+.journey__calm p { margin: 0; color: var(--ink-soft); }
+
+@keyframes journeyIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.journey__label {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.journey__pill {
+  width: 3.1rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: linear-gradient(103deg, var(--brand-soft) 0 50%, #cfe3de 50% 100%);
+  border: 1px solid #bcd6d0;
+}
+
+.journey__medicine {
+  margin: 0.75rem 0 0.15rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.journey__dose {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+}
+
+.journey__voice {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 1rem 0 0.9rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.87rem;
+  transition: border-color 200ms ease, background-color 200ms ease,
+    color 200ms ease;
+}
+
+.journey__voice em {
+  font-style: normal;
+  margin-left: 0.45rem;
+}
+
+.journey__voice--on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+.journey__wave {
+  width: 3px;
+  height: 9px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.journey__voice--on .journey__wave {
+  animation: journeyWave 900ms ease-in-out infinite;
+  opacity: 1;
+}
+
+.journey__voice--on .journey__wave:nth-child(2) { animation-delay: 120ms; }
+.journey__voice--on .journey__wave:nth-child(3) { animation-delay: 240ms; }
+.journey__voice--on .journey__wave:nth-child(4) { animation-delay: 90ms; }
+.journey__voice--on .journey__wave:nth-child(5) { animation-delay: 300ms; }
+
+@keyframes journeyWave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(2.3); }
+}
+
+.journey__btn {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 600;
+  transition: transform 160ms ease, background-color 200ms ease;
+}
+
+/* The tactile beat: it goes down, not up, because a finger just pressed it. */
+.journey__btn--pressed {
+  transform: scale(0.97);
+  background: var(--brand-ink);
+}
+
+.journey__dash {
+  height: 100%;
+  padding: 1.2rem 1.25rem 1.4rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* Scoped: the mock row must not be reachable as a control, and the live
+   dashboard's own rows keep their cursor.
+
+   The real row is a five-column grid - time, photo, what, status, actions.
+   This mock has no actions column, so it declares four; without this the
+   medicine name is dealt into the 2.6rem photo column and wraps one word at a
+   time. Scoped, so the caregiver's real rows keep all five. */
+.journey__rows .schedule__row {
+  cursor: default;
+  grid-template-columns: 3.6rem 2.6rem 1fr auto;
+}
+
+.journey__photo {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey__voice--on .journey__wave { animation: none; }
+  .journey__screen,
+  .journey__calm { animation: none; }
+  .journey__phone,
+  .journey__stageDot,
+  .journey__btn,
+  .journey__replay { transition: none; }
+}
+
+@media (max-width: 56rem) {
+  .land__nav { display: none; }
+
+  .journey__pair {
+    grid-template-columns: 1fr;
+  }
+
+  .journey__stage {
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================================
+   A MISSED DOSE ISN'T ALWAYS A MISSED DOSE
+   Four cases, then the two paths. All new names.
+   ============================================================ */
+
+.land__big {
+  font-size: clamp(2rem, 4.4vw, 2.9rem);
+  line-height: 1.12;
+  color: var(--ink);
+  margin: 0 0 1rem;
+}
+
+.cases {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 1rem;
+}
+
+.cases__lede {
+  max-width: 40rem;
+  margin: 0 0 2.5rem;
+  font-size: 1.12rem;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.cases__list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin: 0 0 3rem;
+  padding: 0;
+  list-style: none;
+}
+
+.cases__list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.85rem;
+  row-gap: 0.2rem;
+  padding: 1.1rem 1.2rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.cases__list li:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.cases__list strong {
+  color: var(--ink);
+  font-size: 1.04rem;
+}
+
+.cases__list span:last-child {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* A dot per case, coloured by whose problem it is. Semantics, not decoration:
+   the fourth one is the only one that is ours, and it is the only one that
+   gets the hatch the real ledger uses for a dose we never delivered. */
+.cases__mark {
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 0.35rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.cases__mark--her { background: var(--warn-mid); }
+.cases__mark--wait { background: var(--line-strong); }
+
+.cases__mark--ours {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--ink-soft) 0 2px,
+    transparent 2px 4px
+  );
+  border: 1px solid var(--ink-soft);
+}
+
+.paths {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.paths__one {
+  padding: 1.4rem 1.4rem 1.6rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.paths__title {
+  margin: 0 0 1rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.paths__flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.paths__flow li {
+  padding: 0.42rem 0.8rem;
+  border-radius: 999px;
+  background: var(--page);
+  border: 1px solid var(--line);
+  font-size: 0.93rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+/* The arrow between steps, as content rather than markup, so the list stays
+   a list for anything reading it aloud. */
+.paths__flow li + li::before {
+  content: "→";
+  margin-right: 0.5rem;
+  margin-left: -0.25rem;
+  color: var(--muted);
+}
+
+.paths__miss {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.paths__end { font-weight: 600; }
+
+.paths__end--good {
+  background: var(--good-bg);
+  border-color: transparent;
+  color: var(--good);
+}
+
+.paths__end--bad {
+  background: var(--warn-bg);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cases__list li { transition: none; }
+}
+
+@media (max-width: 56rem) {
+  .cases__list,
+  .paths {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   THE FAMILY BOARD — who needs me?
+   New names; the rows reuse the real .schedule__row classes and are
+   given the same scoped four-column grid as the journey's row.
+   ============================================================ */
+
+.family {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 1rem;
+}
+
+.board {
+  padding: 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* The dashboard's actual question, said out loud. It is the whole difference
+   between a care tool and an analytics panel. */
+.board__ask {
+  margin: 0 0 1rem;
+  font-family: var(--font-human);
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+.board__people {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.board__person {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.board__person:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.board__person--on {
+  border-color: var(--brand);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.board__name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.board__line {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.board__flag {
+  margin-top: 0.3rem;
+  padding: 0.16rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.board__flag--ok {
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+.board__flag--needs {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.board__dayTitle {
+  margin: 0 0 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Same reason as the journey's rows: this mock has no actions column, so it
+   declares four. Scoped, so the real dashboard keeps all five. */
+.board__rows .schedule__row {
+  cursor: default;
+  grid-template-columns: 3.6rem 2.6rem 1fr auto;
+}
+
+.board__rows { display: grid; gap: 0.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .board__person { transition: none; }
+}
+
+@media (max-width: 56rem) {
+  .board__people { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   THREE NUMBERS · OURS TO FIX · ESCALATION · PRIVACY
+   All new names. .ledger__ours is reused verbatim inside .ours
+   because it is the same badge the real dashboard prints.
+   ============================================================ */
+
+.numbers,
+.trail,
+.privacy {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 1rem;
+}
+
+.numbers__row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 2.5rem 0 1.5rem;
+}
+
+.numbers__one {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 1.75rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Big enough to be read across a room, which is the point being made. */
+.numbers__fig {
+  font-family: var(--font-human);
+  font-size: clamp(3rem, 7vw, 4.6rem);
+  line-height: 1;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.numbers__fig--asked { color: var(--warn); }
+.numbers__fig--taken { color: var(--good); }
+
+.numbers__word {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The claim the product is built on gets its own panel and the hatch that
+   means "we never delivered this" everywhere else in the app. */
+.ours {
+  padding: 1.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(31, 26, 23, 0.045) 0 6px,
+      transparent 6px 12px
+    ),
+    var(--card);
+}
+
+.ours__count {
+  margin: 0;
+  font-family: var(--font-human);
+  font-size: clamp(1.5rem, 3vw, 2.05rem);
+  color: var(--ink);
+}
+
+.ours__badge { margin: 0.7rem 0 0.9rem; }
+
+.ours__say {
+  max-width: 46rem;
+  margin: 0;
+  font-size: 1.06rem;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.trail__steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin: 2.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.trail__steps li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.2rem 1.1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* The connector between steps. Drawn on the card rather than between them so
+   it survives the stack at narrow widths, where it simply disappears. */
+.trail__steps li + li::before {
+  content: "";
+  position: absolute;
+  left: -0.62rem;
+  top: 50%;
+  width: 0.62rem;
+  border-top: 1px solid var(--line-strong);
+}
+
+.trail__when {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.trail__steps strong { color: var(--ink); font-size: 1.04rem; }
+.trail__steps span:last-child { color: var(--muted); font-size: 0.95rem; }
+
+.trail__last {
+  border-color: transparent;
+  background: var(--warn-bg);
+}
+
+.trail__last .trail__when,
+.trail__last strong { color: var(--warn); }
+
+.privacy__cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin: 2.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.privacy__cards li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.4rem 1.35rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.privacy__cards strong { color: var(--ink); font-size: 1.06rem; }
+.privacy__cards span { color: var(--ink-soft); line-height: 1.6; }
+
+/* The last line on the page. Set in the human face and given room, because it
+   is the only sentence written in the reader's own voice. */
+.land__last {
+  margin: 2rem auto 2.25rem;
+  max-width: 34rem;
+  font-family: var(--font-human);
+  font-size: clamp(1.3rem, 2.6vw, 1.7rem);
+  line-height: 1.35;
+  color: var(--brand-ink);
+}
+
+@media (max-width: 56rem) {
+  .numbers__row,
+  .privacy__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .trail__steps {
+    grid-template-columns: 1fr;
+  }
+
+  .trail__steps li + li::before {
+    left: 50%;
+    top: -0.62rem;
+    width: 0;
+    height: 0.62rem;
+    border-top: none;
+    border-left: 1px solid var(--line-strong);
+  }
+}

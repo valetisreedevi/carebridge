@@ -222,6 +222,278 @@ function Phone() {
   );
 }
 
+/**
+ * One dose, from scheduled to answered, on both screens at once.
+ *
+ * The centre of the page. A visitor does not need the product explained if they
+ * can watch it happen: the phone lights itself at eight, the family's voice
+ * plays, she presses one button, and the row on her daughter's dashboard stops
+ * saying "waiting".
+ *
+ * The words on the right are the product's own - "Later today", "Waiting for a
+ * reply", "reminder 1 of 2", "Taken" are the real STATUS_LABEL strings, and the
+ * row tones are the real ones. What a visitor is reading is the actual state
+ * machine, not a description of it.
+ */
+const STAGES = [
+  { tab: "Scheduled", clock: "7:59 am" },
+  { tab: "Reminder", clock: "8:00 am" },
+  { tab: "Delivered", clock: "8:00 am" },
+  { tab: "Answered", clock: "8:01 am" },
+  { tab: "Taken", clock: "8:01 am" },
+];
+
+const LAST = STAGES.length - 1;
+
+function DoseJourney() {
+  const { ref, seen } = useReveal<HTMLDivElement>();
+  // Read once, in the initialiser: an effect that calls setState synchronously
+  // is the one lint rule this file is already carrying four of.
+  const [still] = useState(
+    () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+  const [stage, setStage] = useState(0);
+  const [held, setHeld] = useState(false);
+
+  // A chain of timeouts rather than one interval, so each step can have its own
+  // beat - the wake is quick, the voice needs a moment to be heard.
+  useEffect(() => {
+    if (!seen || still || held || stage >= LAST) return;
+    const wait = stage === 0 ? 1100 : stage === 2 ? 2100 : 1500;
+    const id = window.setTimeout(() => setStage((s) => s + 1), wait);
+    return () => window.clearTimeout(id);
+  }, [seen, still, held, stage]);
+
+  // Touching it hands control over for good. Nothing is more irritating than a
+  // demo that keeps moving while you are trying to read one step of it.
+  const pick = (next: number) => {
+    setHeld(true);
+    setStage(next);
+  };
+
+  const onKeys = (event: React.KeyboardEvent) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    pick(
+      event.key === "ArrowRight"
+        ? Math.min(LAST, stage + 1)
+        : Math.max(0, stage - 1),
+    );
+  };
+
+  const awake = stage >= 1;
+  const speaking = stage === 2;
+  const answered = stage >= 3;
+  const done = stage === LAST;
+
+  return (
+    <div className="journey" ref={ref}>
+      <div className="journey__head">
+        <p className="land__eyebrow">See what happens when a dose is due</p>
+        <button
+          type="button"
+          className="journey__replay"
+          onClick={() => {
+            setHeld(false);
+            setStage(0);
+          }}
+        >
+          {stage === 0 && !held ? "Watch it" : "Play it again"}
+        </button>
+      </div>
+
+      <div
+        className="journey__stages"
+        role="tablist"
+        aria-label="One dose, step by step"
+        onKeyDown={onKeys}
+      >
+        {STAGES.map((s, i) => (
+          <button
+            key={s.tab}
+            type="button"
+            role="tab"
+            aria-selected={i === stage}
+            tabIndex={i === stage ? 0 : -1}
+            className={`journey__stage ${i === stage ? "journey__stage--on" : ""} ${
+              i < stage ? "journey__stage--past" : ""
+            }`}
+            onClick={() => pick(i)}
+          >
+            <span className="journey__stageDot" aria-hidden="true" />
+            {s.tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="journey__pair">
+        {/* Her phone. Decorative - the caption and the stage names carry the
+            meaning, and a keyboard user should not land on three dead buttons. */}
+        <figure className="journey__side" aria-hidden="true">
+          <div className={`journey__phone ${awake ? "journey__phone--awake" : ""}`}>
+            <p className="journey__clock">{STAGES[stage].clock}</p>
+
+            {!awake ? (
+              <p className="journey__asleep">on the side table</p>
+            ) : done ? (
+              <div className="journey__calm">
+                <span className="journey__tick">✓</span>
+                <p>Nothing to take right now</p>
+              </div>
+            ) : (
+              <div className="journey__screen">
+                <p className="journey__label">Medicine time</p>
+                <span className="journey__pill" />
+                <p className="journey__medicine">Amlodipine</p>
+                <p className="journey__dose">1 tablet · after food</p>
+
+                <div
+                  className={`journey__voice ${speaking ? "journey__voice--on" : ""}`}
+                >
+                  <span className="journey__wave" />
+                  <span className="journey__wave" />
+                  <span className="journey__wave" />
+                  <span className="journey__wave" />
+                  <span className="journey__wave" />
+                  <em>{speaking ? "your voice" : "Hear your family"}</em>
+                </div>
+
+                <div
+                  className={`journey__btn ${answered ? "journey__btn--pressed" : ""}`}
+                >
+                  I took it
+                </div>
+              </div>
+            )}
+          </div>
+          <figcaption>Her phone</figcaption>
+        </figure>
+
+        <figure className="journey__side" aria-hidden="true">
+          <div className="journey__dash">
+            <p className="dash__eyebrow">Today</p>
+            <ul className="schedule journey__rows">
+              <li
+                className={`schedule__row schedule__row--${
+                  done ? "good" : stage === 0 ? "idle" : "waiting"
+                }`}
+              >
+                <span className="schedule__time">8:00 am</span>
+                <span className="journey__photo pill pill--teal" />
+                <span className="schedule__what">
+                  <strong>Amlodipine</strong>
+                  <small>1 tablet · after food</small>
+                </span>
+                <span className="schedule__status">
+                  {done
+                    ? "Taken"
+                    : stage === 0
+                      ? "Later today"
+                      : "Waiting for a reply"}
+                  {stage >= 1 && !done && <small>reminder 1 of 2</small>}
+                  {done && <small>she answered on her phone</small>}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <figcaption>Your dashboard</figcaption>
+        </figure>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One account, several people to look after.
+ *
+ * The dashboard's own question is "who needs me?", not "what are my numbers",
+ * so the board leads with the person and the one word that matters, and the
+ * timeline only opens for whoever you pick. The switcher is the real one - the
+ * caregiver app has exactly this row of chips.
+ */
+const FAMILY = [
+  {
+    name: "Mom",
+    line: "8 of 8 taken",
+    ok: true,
+    day: [
+      { time: "8:00 am", what: "Amlodipine", tone: "good", said: "Taken" },
+      { time: "2:00 pm", what: "Metformin", tone: "good", said: "Taken" },
+      { time: "8:00 pm", what: "Atorvastatin", tone: "good", said: "Taken" },
+    ],
+  },
+  {
+    name: "Dad",
+    line: "6 of 8 taken",
+    ok: false,
+    day: [
+      { time: "8:00 am", what: "Metformin", tone: "good", said: "Taken" },
+      { time: "2:00 pm", what: "Losartan", tone: "waiting", said: "Waiting for a reply" },
+      { time: "8:00 pm", what: "Eye drops", tone: "bad", said: "Needs you" },
+    ],
+  },
+  {
+    name: "Grandma",
+    line: "5 of 5 taken",
+    ok: true,
+    day: [
+      { time: "9:00 am", what: "Vitamin D", tone: "good", said: "Taken" },
+      { time: "1:00 pm", what: "Calcium", tone: "good", said: "Taken" },
+      { time: "7:00 pm", what: "Thyroxine", tone: "good", said: "Taken" },
+    ],
+  },
+];
+
+function FamilyBoard() {
+  const [who, setWho] = useState(1);
+  const person = FAMILY[who];
+
+  return (
+    <div className="board">
+      <p className="board__ask">Who needs me?</p>
+
+      <div className="board__people">
+        {FAMILY.map((p, i) => (
+          <button
+            key={p.name}
+            type="button"
+            className={`board__person ${i === who ? "board__person--on" : ""}`}
+            onClick={() => setWho(i)}
+            aria-pressed={i === who}
+          >
+            <span className="board__name">{p.name}</span>
+            <span className="board__line">{p.line}</span>
+            <span
+              className={`board__flag ${p.ok ? "board__flag--ok" : "board__flag--needs"}`}
+            >
+              {p.ok ? "All caught up" : "1 needs attention"}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="board__day" aria-live="polite">
+        <p className="board__dayTitle">{person.name}&rsquo;s day</p>
+        <ul className="schedule board__rows">
+          {person.day.map((row) => (
+            <li
+              key={row.time}
+              className={`schedule__row schedule__row--${row.tone}`}
+            >
+              <span className="schedule__time">{row.time}</span>
+              <span className="journey__photo pill pill--teal" />
+              <span className="schedule__what">
+                <strong>{row.what}</strong>
+              </span>
+              <span className="schedule__status">{row.said}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function Landing() {
   return (
     <main className="land">
@@ -230,6 +502,11 @@ export default function Landing() {
           <Mark />
           CareBridge
         </span>
+        <nav className="land__nav">
+          <a href="#how">How it works</a>
+          <a href="#family">For families</a>
+          <a href="#safety">Safety</a>
+        </nav>
         <Link className="btn-primary btn-primary--sm" to="/signin">
           Sign in
         </Link>
@@ -237,24 +514,25 @@ export default function Landing() {
 
       <section className="land__hero">
         <div className="land__heroText">
-          <p className="land__eyebrow">Two screens. However many of you.</p>
           <h1>
-            You cannot be there<br />
-            at eight in the morning.<br />
-            <em>Your voice can.</em>
+            Still there,<br />
+            <em>even when you&rsquo;re not.</em>
           </h1>
+          <p className="land__lede land__lede--lift">
+            You can&rsquo;t be beside them for every medicine. But your voice can
+            be there when it matters.
+          </p>
           <p className="land__lede">
-            You set up the medicines and record a reminder in <em>your</em> own
-            voice. CareBridge goes on their phone once — after that they never
-            open it. It wakes itself at the right time, and they hear you. Then
-            you see what actually happened, so you never have to ring and ask.
+            CareBridge lets you send a reminder in your own voice, helps them
+            answer with one tap or in their own words, and tells you what
+            actually happened.
           </p>
           <div className="land__cta">
             <Link className="btn-primary" to="/signin">
               Get started
             </Link>
-            <a className="land__quiet" href="#honest">
-              How it stays honest
+            <a className="land__quiet" href="#how">
+              See how it works
             </a>
           </div>
         </div>
@@ -262,196 +540,102 @@ export default function Landing() {
         <Phone />
       </section>
 
+      <section className="land__moment" id="how">
+        <DoseJourney />
+      </section>
+
       <section className="land__story">
-        <Reveal as="p">
-          A missed dose is almost never stubbornness. You have a shift to get
-          to, a meeting that runs on, a child to collect. The person at home has
-          four tablets a day and a strip that looks like every other strip, and
-          nobody in the room to say which one is next. The only way to find out
-          is to ring and ask, and be told yes, because they would rather not
-          have you worrying.
+        <Reveal as="h2" className="land__big">
+          You can&rsquo;t be there for every dose.
         </Reveal>
-        <Reveal as="p" className="land__strike" delay={140}>
-          CareBridge asks for you, at the moment it matters, in a voice they
-          will not ignore. Then it tells you what it actually heard.
+        <Reveal as="p" delay={80}>
+          Work starts. Meetings run late. Life gets in the way. Meanwhile
+          someone at home still has a medicine to take, and a strip that looks
+          like every other strip.
+        </Reveal>
+        <Reveal as="p" className="land__strike" delay={160}>
+          But your voice can.
         </Reveal>
       </section>
 
-      <section className="land__steps">
-        <ol>
+      <section className="cases">
+        <Reveal as="h2" className="land__big">
+          A missed dose isn&rsquo;t always a missed dose.
+        </Reveal>
+        <Reveal as="p" className="cases__lede" delay={80}>
+          Four different things get written down as one word by every other
+          reminder app. They are not the same thing, and only one of them is
+          about her at all.
+        </Reveal>
+
+        <ul className="cases__list">
           <Reveal as="li" delay={0}>
-            <span className="land__num">1</span>
-            <h3>You set it up, once</h3>
-            <p>
-              The medicine, the dose, which parts of the day, and how long the
-              doctor prescribed for. Ten days means ten days — it stops on its
-              own.
-            </p>
+            <span className="cases__mark cases__mark--her" aria-hidden="true" />
+            <strong>She forgot.</strong>
+            <span>The one case everybody assumes.</span>
           </Reveal>
-          <Reveal as="li" delay={110}>
-            <span className="land__num">2</span>
-            <h3>Their phone does the rest</h3>
-            <p>
-              Even locked, even face-down, their phone plays the message you
-              recorded — in their own language, beside a photograph of the
-              tablet. It installs once on an Android phone, and they never have
-              to open it again.
-            </p>
+          <Reveal as="li" delay={90}>
+            <span className="cases__mark cases__mark--wait" aria-hidden="true" />
+            <strong>She heard it, and hasn&rsquo;t answered yet.</strong>
+            <span>Still open. Nobody has failed.</span>
           </Reveal>
-          <Reveal as="li" delay={220}>
-            <span className="land__num">3</span>
-            <h3>One button, and you know</h3>
-            <p>
-              They press it, or they just say so out loud. If nobody answers,
-              CareBridge tries again — and then it tells you, by notification
-              and by email.
-            </p>
+          <Reveal as="li" delay={180}>
+            <span className="cases__mark cases__mark--wait" aria-hidden="true" />
+            <strong>The phone was off, or flat, or face-down in a bag.</strong>
+            <span>The reminder went out. It arrived nowhere.</span>
           </Reveal>
-        </ol>
+          <Reveal as="li" delay={270}>
+            <span className="cases__mark cases__mark--ours" aria-hidden="true" />
+            <strong>It never reached her.</strong>
+            <span>Ours to fix, and we say so.</span>
+          </Reveal>
+        </ul>
+
+        {/* The two paths, in the product's own status words. */}
+        <div className="paths">
+          <Reveal className="paths__one" delay={0}>
+            <p className="paths__title">When it works</p>
+            <ol className="paths__flow">
+              <li>Scheduled</li>
+              <li>Asked</li>
+              <li>Answered</li>
+              <li className="paths__end paths__end--good">Taken</li>
+            </ol>
+          </Reveal>
+          <Reveal className="paths__one" delay={120}>
+            <p className="paths__title">When it doesn&rsquo;t</p>
+            <ol className="paths__flow">
+              <li>Scheduled</li>
+              <li className="paths__miss">Not reached</li>
+              <li>Reminded again</li>
+              <li className="paths__end paths__end--bad">You are told</li>
+            </ol>
+          </Reveal>
+        </div>
       </section>
 
-      {/* The two surfaces, side by side, because that IS the product: one
-          screen at a side table and one wherever the family happens to be.
-          Both are built from the app's own class names — .elder__* and
-          .schedule__row and .ledger are the same rules the live product uses. */}
-      <section className="show">
-        {/* The heading below already names both people. The eyebrow that used
-            to sit here said it a third time, after the hero eyebrow had said it
-            first. */}
-        <p className="land__eyebrow">What each of you sees</p>
-        <Reveal as="h2">Their phone. Your dashboard.</Reveal>
 
-        <div className="show__pair">
-          <figure className="show__side">
-            {/* The mock is decoration; the caption below it is the content. So
-                the phone is hidden from assistive tech and its buttons are
-                taken out of the tab order - a keyboard user was landing on
-                three controls that do nothing - while the caption still
-                reads. */}
-            <div className="show__phone" aria-hidden="true">
-              <div className="show__elder">
-                <p className="elder__title">Medicine time</p>
-                <div className="show__photo pill pill--teal" aria-hidden="true" />
-                <p className="elder__medicine">Amlodipine</p>
-                <p className="elder__dose">1 tablet</p>
-                <p className="elder__food">after food</p>
-                <button
-                  className="elder__voice elder__voice--on"
-                  type="button"
-                  tabIndex={-1}
-                >
-                  <span className="elder__voiceMark">▶</span> Hear family
-                </button>
-                <button className="elder__mic" type="button" tabIndex={-1}>
-                  Speak to CareBridge
-                </button>
-                <button
-                  className="elder__button elder__button--taken"
-                  type="button"
-                  tabIndex={-1}
-                >
-                  I took it
-                </button>
-                <button
-                  className="elder__button elder__button--later"
-                  type="button"
-                  tabIndex={-1}
-                >
-                  Remind me later
-                </button>
-              </div>
-            </div>
-            <figcaption>
-              <strong>What they see.</strong> A photograph of the tablet, your
-              voice on tap, and two ways to answer — a button, or just saying
-              it out loud. Nothing to scroll, no way to get lost.
-            </figcaption>
-          </figure>
-
-          <div className="show__link" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-
-          <figure className="show__side show__side--wide">
-            <div className="show__dash">
-              {/* One account, both parents. The real dashboard switches people
-                  with exactly this row of chips; here it is decoration, so it
-                  is a list rather than the live buttons. */}
-              <ul className="show__people">
-                <li className="show__person show__person--on">Amma</li>
-                <li className="show__person">Nanna</li>
-              </ul>
-              <p className="dash__eyebrow">Today</p>
-              <p className="dash__verdict dash__verdict--alert">
-                Fever Tablet needs your attention
-              </p>
-
-              <section className="ledger">
-                <dl className="ledger__figures">
-                  <div className="ledger__figure ledger__figure--taken">
-                    <dd><Tally to={6} /></dd>
-                    <dt>Taken</dt>
-                  </div>
-                  <div className="ledger__figure ledger__figure--asked">
-                    <dd><Tally to={8} /></dd>
-                    <dt>Asked</dt>
-                  </div>
-                  <div className="ledger__figure">
-                    <dd><Tally to={10} /></dd>
-                    <dt>Scheduled</dt>
-                  </div>
-                </dl>
-                <div className="progress__bar">
-                  <span className="progress__fill" style={{ width: "60%" }} />
-                  <span className="progress__asked" style={{ width: "20%" }} />
-                  <span className="progress__unreached" style={{ width: "20%" }} />
-                </div>
-              </section>
-
-              <ul className="schedule show__rows">
-                <li className="schedule__row schedule__row--good">
-                  <span className="schedule__time">8:00 AM</span>
-                  <span className="schedule__photo pill pill--teal" />
-                  <span className="schedule__what">
-                    <strong>Amlodipine</strong>
-                    <span className="course">Day 4 of 15 · ends 18 Sep</span>
-                  </span>
-                  <span className="schedule__status">Taken</span>
-                </li>
-                <li className="schedule__row schedule__row--bad">
-                  <span className="schedule__time">8:00 PM</span>
-                  <span className="schedule__photo pill pill--amber" />
-                  <span className="schedule__what">
-                    <strong>Fever Tablet</strong>
-                    <small>1 tablet · after food</small>
-                  </span>
-                  <span className="schedule__status">Needs you</span>
-                </li>
-                <li className="schedule__row schedule__row--waiting">
-                  <span className="schedule__time">9:00 PM</span>
-                  <span className="schedule__photo pill pill--slate" />
-                  <span className="schedule__what">
-                    <strong>Metformin</strong>
-                    <small>1 tablet</small>
-                  </span>
-                  <span className="schedule__status">Waiting</span>
-                </li>
-              </ul>
-            </div>
-            <figcaption>
-              <strong>What you see.</strong> The day at a glance, three honest
-              numbers, and every dose coloured by what actually happened —
-              including the ones we failed to deliver.
-            </figcaption>
-          </figure>
-        </div>
+      <section className="family" id="family">
+        <p className="land__eyebrow">One account, everyone you look after</p>
+        <Reveal as="h2" className="land__big">
+          Care is rarely one person.
+        </Reveal>
+        <Reveal as="p" className="cases__lede" delay={80}>
+          Most people carrying this are carrying it for more than one person.
+          Mom&rsquo;s morning, Dad&rsquo;s evening, and a grandmother who is
+          doing fine — in one place, so the day starts with who needs you rather
+          than with a list.
+        </Reveal>
+        <Reveal delay={140}>
+          <FamilyBoard />
+        </Reveal>
       </section>
 
       <section className="team">
         <p className="land__eyebrow">Nobody has to be the only one</p>
-        <Reveal as="h2">Care is rarely one person&rsquo;s job.</Reveal>
+        <Reveal as="h2" className="land__big">
+          Care doesn&rsquo;t have to fall on one person.
+        </Reveal>
 
         <div className="team__pair">
           <div className="team__text">
@@ -503,20 +687,64 @@ export default function Landing() {
         </Reveal>
       </section>
 
+      <section className="numbers">
+        <p className="land__eyebrow">Being straight with you</p>
+        <Reveal as="h2" className="land__big">
+          Three numbers. Not one.
+        </Reveal>
+        <Reveal as="p" className="cases__lede" delay={80}>
+          What the doctor prescribed. What CareBridge actually managed to ask
+          about. And what came back as an answer. Three different facts, kept
+          apart on purpose.
+        </Reveal>
+
+        <div className="numbers__row" aria-hidden="true">
+          <Reveal className="numbers__one" delay={0}>
+            <span className="numbers__fig">
+              <Tally to={10} />
+            </span>
+            <span className="numbers__word">Scheduled</span>
+          </Reveal>
+          <Reveal className="numbers__one" delay={110}>
+            <span className="numbers__fig numbers__fig--asked">
+              <Tally to={8} />
+            </span>
+            <span className="numbers__word">Asked</span>
+          </Reveal>
+          <Reveal className="numbers__one" delay={220}>
+            <span className="numbers__fig numbers__fig--taken">
+              <Tally to={6} />
+            </span>
+            <span className="numbers__word">Answered</span>
+          </Reveal>
+        </div>
+
+        {/* The whole argument of the product, in one panel. */}
+        <Reveal className="ours" delay={300}>
+          <p className="ours__count">
+            <Tally to={2} /> doses never reached her.
+          </p>
+          <p className="ours__badge">
+            <span className="ledger__ours">ours to fix</span>
+          </p>
+          <p className="ours__say">
+            Not a missed dose. A reminder that never arrived — the phone was
+            off, or flat, or had never been set up. CareBridge does not put that
+            on her, and it does not quietly round it into a number that looks
+            like she forgot.
+          </p>
+        </Reveal>
+      </section>
+
       <section className="land__honest" id="honest">
         <div className="land__honestText">
-          <p className="land__eyebrow">Being straight with you</p>
-          <Reveal as="h2">Three numbers, not one.</Reveal>
+          <p className="land__eyebrow">And here it is in the product</p>
+          <Reveal as="h2">The same day, on your dashboard.</Reveal>
           <p>
-            What the doctor prescribed. What CareBridge actually managed to
-            ask about. And what came back as an answer. Three numbers, kept
-            apart on purpose, because they are three different facts.
-          </p>
-          <p>
-            When the numbers do not line up, CareBridge says <em>why</em>. A
-            dose that was never delivered — a phone that was off, a reminder
-            that never arrived — is marked as ours to fix, not as a dose
-            somebody declined to take.
+            Not a picture of the product — the product&rsquo;s own markup and
+            stylesheet, filled with a plausible day. The green is what she
+            answered, the amber is still waiting, and the hatched piece is the
+            part we never delivered.
           </p>
         </div>
 
@@ -568,24 +796,6 @@ export default function Landing() {
             under the argument it made the left side run long past the ledger
             beside it, and what happens to a recording of your mother's voice
             reads as an evasion when it is squeezed in as a column footnote. */}
-        <div className="land__terms">
-          <p>
-            Your recording, the photographs of the medicines and the record of
-            who answered stay inside your own account. They are used to send the
-            reminders and to show you this page, and for nothing else — not
-            sold, not advertised against, not shared with anyone you have not
-            invited to the care team. You can delete a medicine, and its
-            recording goes with it.
-          </p>
-          <p>
-            <strong>
-              CareBridge reminds. It does not advise, diagnose, or replace a
-              doctor.
-            </strong>{" "}
-            The schedule is the one you enter, and it is only ever as right as
-            the prescription you were given.
-          </p>
-        </div>
       </section>
 
       <section className="land__features">
@@ -691,6 +901,81 @@ export default function Landing() {
         </ul>
       </section>
 
+      <section className="trail">
+        <p className="land__eyebrow">When nobody answers</p>
+        <Reveal as="h2" className="land__big">
+          CareBridge doesn&rsquo;t give up at the first silence.
+        </Reveal>
+        <Reveal as="p" className="cases__lede" delay={80}>
+          A dose nobody answers is not marked missed and forgotten. It is tried
+          again, and then it becomes your problem to know about rather than hers
+          to have failed at.
+        </Reveal>
+
+        <ol className="trail__steps">
+          <Reveal as="li" delay={0}>
+            <span className="trail__when">8:00 pm</span>
+            <strong>The reminder goes out</strong>
+            <span>Her phone wakes and plays your voice.</span>
+          </Reveal>
+          <Reveal as="li" delay={90}>
+            <span className="trail__when">no answer</span>
+            <strong>Nothing comes back</strong>
+            <span>The dose stays open. Nobody has failed yet.</span>
+          </Reveal>
+          <Reveal as="li" delay={180}>
+            <span className="trail__when">8:10 pm</span>
+            <strong>It asks again</strong>
+            <span>A second reminder, ten minutes later.</span>
+          </Reveal>
+          <Reveal as="li" delay={270} className="trail__last">
+            <span className="trail__when">still nothing</span>
+            <strong>You are told</strong>
+            <span>
+              A notification, then an email — to everyone on the care team, each
+              one separately.
+            </span>
+          </Reveal>
+        </ol>
+      </section>
+
+      <section className="privacy" id="safety">
+        <p className="land__eyebrow">Their health stays with the family</p>
+        <Reveal as="h2" className="land__big">
+          What we hold, and what we do with it.
+        </Reveal>
+
+        <ul className="privacy__cards">
+          <Reveal as="li" delay={0}>
+            <strong>Your recordings</strong>
+            <span>
+              Used to play the reminder, and for nothing else. Delete the
+              medicine and the recording goes with it.
+            </span>
+          </Reveal>
+          <Reveal as="li" delay={90}>
+            <strong>Medicine photographs</strong>
+            <span>Stored inside your account, shown on her screen at the dose.</span>
+          </Reveal>
+          <Reveal as="li" delay={180}>
+            <strong>Who can see it</strong>
+            <span>
+              Only the people you invited to the care team. Nobody else, and no
+              advertiser.
+            </span>
+          </Reveal>
+          <Reveal as="li" delay={270}>
+            <strong>A reminder, not a doctor</strong>
+            <span>
+              CareBridge does not advise, diagnose or replace a doctor. The
+              schedule is the one you enter, and only as right as the
+              prescription you were given.
+            </span>
+          </Reveal>
+        </ul>
+      </section>
+
+
       <section className="land__end">
         <Reveal as="h2">
           Go to work. CareBridge stays with them.
@@ -709,6 +994,11 @@ export default function Landing() {
         <Reveal as="p" className="land__endSub" delay={280}>
           A few minutes to set up, and then it is one less thing you carry
           through the day.
+        </Reveal>
+        {/* The last line is hers, not ours. Everything above is what the
+            product does; this is the sentence somebody using it would say. */}
+        <Reveal as="p" className="land__last" delay={360}>
+          I may be away from them. But I&rsquo;m still there.
         </Reveal>
         <Link className="btn-primary" to="/signin">
           Get started
