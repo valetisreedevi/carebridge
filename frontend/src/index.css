@@ -3799,17 +3799,54 @@ body {
   border: 1px solid #bcd6d0;
 }
 
+/* The photograph of the strip, at the size the real screen gives it: the
+   largest thing on the phone, because recognising the packet is how somebody
+   who cannot read the name still knows which one this is. */
+.journey__shot {
+  width: 100%;
+  max-width: 9.5rem;
+  /* height:auto is load-bearing. The <img> carries width/height attributes so
+     the browser can reserve space before it loads; without this the attribute
+     height wins over aspect-ratio and the strip renders 447px tall, pushing
+     the name and every button off the phone. */
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: 0 1px 3px rgba(31, 26, 23, 0.06),
+    0 12px 26px -16px rgba(31, 26, 23, 0.4);
+}
+
+/* The name is set LARGER than the "Medicine time" heading above it. That
+   inversion is the whole hierarchy of the elder screen - the heading says what
+   kind of moment this is, the name says the only thing that has to be read. */
 .journey__medicine {
-  margin: 0.75rem 0 0.15rem;
-  font-size: 1.45rem;
+  margin: 0.85rem 0 0;
+  font-size: 1.65rem;
   font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.journey__strength {
+  margin: 0.1rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 600;
   color: var(--ink);
 }
 
 .journey__dose {
-  margin: 0;
+  margin: 0.15rem 0 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.journey__food {
+  margin: 0.1rem 0 0;
   color: var(--ink-soft);
-  font-size: 1rem;
+  font-size: 0.98rem;
 }
 
 .journey__voice {
@@ -3861,8 +3898,12 @@ body {
   50% { transform: scaleY(2.3); }
 }
 
+/* Three full-width blocks, in the order the product shows them: answer, put
+   off, speak. Same descending emphasis as the real screen - solid, outlined,
+   dashed - so a visitor can see at a glance which one is the easy way out. */
 .journey__btn {
   width: 100%;
+  margin-top: 0.5rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;
   background: var(--brand);
@@ -3870,6 +3911,25 @@ body {
   font-size: 1.05rem;
   font-weight: 600;
   transition: transform 160ms ease, background-color 200ms ease;
+}
+
+.journey__btn:first-of-type {
+  margin-top: 0.9rem;
+}
+
+.journey__btn--later {
+  background: var(--card);
+  color: var(--brand-ink);
+  border: 2px solid var(--brand);
+  padding: calc(0.85rem - 2px) 1rem;
+}
+
+.journey__btn--speak {
+  background: var(--card);
+  color: var(--brand);
+  border: 2px dashed var(--brand);
+  padding: calc(0.85rem - 2px) 1rem;
+  font-size: 0.98rem;
 }
 
 /* The tactile beat: it goes down, not up, because a finger just pressed it. */

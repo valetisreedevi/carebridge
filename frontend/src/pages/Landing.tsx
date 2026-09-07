@@ -205,7 +205,7 @@ function Phone() {
         <div className="phone__screen">
           <p className="phone__label">MEDICINE TIME</p>
           <div className="phone__pill" />
-          <p className="phone__name">Amlodipine</p>
+          <p className="phone__name">Vitamin C 500 mg</p>
           <p className="phone__dose">1 tablet · after food</p>
           <div className="phone__voice">
             <span className="phone__wave" />
@@ -341,11 +341,24 @@ function DoseJourney() {
                 <p>Nothing to take right now</p>
               </div>
             ) : (
+              /* Deliberately the real screen's proportions, not a prettier
+                 version of them: the medicine name is set larger than the
+                 heading above it, and the three actions are full-width blocks
+                 in the order the product actually shows them - answer, put off,
+                 speak. What tells a visitor who this was built for is the size
+                 of the type, not the photograph. */
               <div className="journey__screen">
                 <p className="journey__label">Medicine time</p>
-                <span className="journey__pill" />
-                <p className="journey__medicine">Amlodipine</p>
-                <p className="journey__dose">1 tablet · after food</p>
+
+                <img
+                  className="journey__shot"
+                  src="/medicine-vitamin-c.jpg"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  width="447"
+                  height="447"
+                />
 
                 <div
                   className={`journey__voice ${speaking ? "journey__voice--on" : ""}`}
@@ -358,10 +371,21 @@ function DoseJourney() {
                   <em>{speaking ? "your voice" : "Hear your family"}</em>
                 </div>
 
+                <p className="journey__medicine">Vitamin C</p>
+                <p className="journey__strength">500 mg</p>
+                <p className="journey__dose">1 tablet</p>
+                <p className="journey__food">after food</p>
+
                 <div
                   className={`journey__btn ${answered ? "journey__btn--pressed" : ""}`}
                 >
                   I took it
+                </div>
+                <div className="journey__btn journey__btn--later">
+                  Remind me later
+                </div>
+                <div className="journey__btn journey__btn--speak">
+                  Speak to CareBridge
                 </div>
               </div>
             )}
@@ -381,7 +405,7 @@ function DoseJourney() {
                 <span className="schedule__time">8:00 am</span>
                 <span className="journey__photo pill pill--teal" />
                 <span className="schedule__what">
-                  <strong>Amlodipine</strong>
+                  <strong>Vitamin C 500 mg</strong>
                   <small>1 tablet · after food</small>
                 </span>
                 <span className="schedule__status">
@@ -563,9 +587,8 @@ export default function Landing() {
           A missed dose isn&rsquo;t always a missed dose.
         </Reveal>
         <Reveal as="p" className="cases__lede" delay={80}>
-          Four different things get written down as one word by every other
-          reminder app. They are not the same thing, and only one of them is
-          about them at all.
+          Four different things end up under one word. They are not the same
+          thing, and only one of them is about the person at all.
         </Reveal>
 
         <ul className="cases__list">
@@ -581,8 +604,11 @@ export default function Landing() {
           </Reveal>
           <Reveal as="li" delay={180}>
             <span className="cases__mark cases__mark--wait" aria-hidden="true" />
-            <strong>The phone was off, or flat, or face-down in a bag.</strong>
-            <span>The reminder went out. It arrived nowhere.</span>
+            <strong>The phone was switched off, or out of battery.</strong>
+            <span>
+              A locked phone is no trouble — CareBridge wakes it. A phone with
+              no power is a different thing.
+            </span>
           </Reveal>
           <Reveal as="li" delay={270}>
             <span className="cases__mark cases__mark--ours" aria-hidden="true" />
