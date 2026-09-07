@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
@@ -29,6 +30,7 @@ import com.carebridge.elder.data.Pairing
 import com.carebridge.elder.data.Reminder
 import com.carebridge.elder.notify.REMINDER_NOTIFICATION_ID
 import com.carebridge.elder.ui.theme.CareBridgeTheme
+import kotlinx.coroutines.delay
 import java.time.OffsetDateTime
 import java.util.Locale
 
@@ -51,6 +53,22 @@ class ReminderActivity : ComponentActivity() {
 
         /** How long the family's recording gets before we speak instead. */
         private const val AUDIO_PATIENCE_MS = 3_000L
+
+        /**
+         * How long the channel's own tone is allowed to ring before the
+         * family's voice starts.
+         *
+         * A recorded voice is a conversational sound. From a handset on a
+         * table across the room it does not reliably fetch anybody. The tone
+         * on this channel is carried on ALARM attributes and plays through
+         * silent mode, so it is the part that actually turns a head - and it
+         * was being cancelled in the first line of onCreate, roughly two
+         * hundred milliseconds in, leaving a silent gap while the reminder was
+         * fetched and only then the voice.
+         *
+         * So it rings, and THEN she is spoken to.
+         */
+        private const val MIN_RING_MS = 2_600L
 
         /**
          * How recently a dose must have rung for its recording to play by itself.
@@ -80,6 +98,9 @@ class ReminderActivity : ComponentActivity() {
     private var player: MediaPlayer? = null
     private var recognizer: SpeechRecognizer? = null
     private var playedFor: String? = null
+
+    /** When this screen came up, so the ring can be measured from it. */
+    private var startedAt = 0L
     private var focusRequest: AudioFocusRequest? = null
     private val model: ReminderViewModel by viewModels()
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -108,13 +129,16 @@ class ReminderActivity : ComponentActivity() {
         // — is wrong for somebody who opened the app herself to read the day.
         val showList = intent.getBooleanExtra(EXTRA_SHOW_LIST, false)
 
-        // First thing, before any logging or work that could delay it. The
-        // channel's tone belongs to the system and cannot be stopped any other
-        // way, and until this runs it is playing over the family's recording.
+        // The tone is NOT cancelled here any more. It is the loud part, and
+        // cancelling it on arrival meant it rang for about as long as it takes
+        // this activity to start and was followed by silence while the reminder
+        // was fetched. It is now cancelled where the voice begins, below, so
+        // the ring is what carries the gap.
+        //
         // If this activity never starts — overlay refused, full-screen intent
-        // withheld — this never runs and the notification keeps ringing, which
-        // is exactly the behaviour that case needs.
-        dismissNotification()
+        // withheld — nothing here runs and the notification keeps ringing,
+        // which is exactly the behaviour that case needs.
+        startedAt = SystemClock.elapsedRealtime()
         if (!showList) armGiveUp()
 
         // Proof, in the log, that the phone really was asleep and locked when
@@ -169,10 +193,26 @@ class ReminderActivity : ComponentActivity() {
                 // nobody had done when a new phone paired and was spoken to
                 // about a dose from hours before it existed.
                 LaunchedEffect(state.queue.firstOrNull()?.eventId, showList) {
-                    if (showList) return@LaunchedEffect
+                    // Reading the list is not an alarm, so the tone stops now.
+                    if (showList) {
+                        dismissNotification()
+                        return@LaunchedEffect
+                    }
+
+                    // Nothing came back yet. The tone is LEFT RINGING on
+                    // purpose: a phone that has woken her and then gone quiet
+                    // while a fetch retries is worse than one that keeps
+                    // asking. armGiveUp stands it down after three minutes.
                     val reminder = state.queue.firstOrNull() ?: return@LaunchedEffect
+
                     if (playedFor == reminder.eventId) return@LaunchedEffect
-                    if (!justRang(reminder)) return@LaunchedEffect
+
+                    // Open, but not ringing - she opened the screen herself, or
+                    // this is an older dose. Stop the tone and say nothing.
+                    if (!justRang(reminder)) {
+                        dismissNotification()
+                        return@LaunchedEffect
+                    }
                     playedFor = reminder.eventId
 
                     language = reminder.language
@@ -182,6 +222,17 @@ class ReminderActivity : ComponentActivity() {
                         reminder.medicationName ?: "medicine",
                     )
                     val url = reminder.caregiverAudioUrl
+
+                    // Let the alarm-attributed tone finish turning a head. On a
+                    // slow phone the fetch has already spent this and nothing
+                    // is added; on a fast one it is the difference between a
+                    // voice arriving in an empty room and arriving in front of
+                    // somebody.
+                    val rung = SystemClock.elapsedRealtime() - startedAt
+                    if (rung < MIN_RING_MS) delay(MIN_RING_MS - rung)
+
+                    // Only now, so the tone never talks over the recording.
+                    dismissNotification()
 
                     if (url == null) speak(spoken)
                     else playCaregiverVoice(ApiClient.absolute(url), spoken)
@@ -235,7 +286,9 @@ class ReminderActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        dismissNotification()
+        // Deliberately not dismissed here either: a dose arriving while this
+        // screen is already up gets the same ring as one that raised it.
+        startedAt = SystemClock.elapsedRealtime()
 
         // Was recreate(), which tore the screen down and rebuilt it — so when
         // three medicines arrived at once the last push won and the first two
@@ -488,6 +541,10 @@ class ReminderActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // The tone is no longer cancelled on arrival, so it must be cancelled
+        // on the way out - otherwise a screen torn down before the voice ever
+        // started would leave it ringing with nothing to stop it.
+        dismissNotification()
         giveUp?.let { handler.removeCallbacks(it) }
         releaseAudioFocus()
         player?.release()
