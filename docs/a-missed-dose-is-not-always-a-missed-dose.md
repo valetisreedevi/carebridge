@@ -1,4 +1,4 @@
-# She hears her daughter's voice at 8pm
+# The medicine reminder that refuses to guess
 
 It is 11:40pm. A woman in another city opens an app to check on her mother.
 
@@ -14,7 +14,11 @@ The app did not say that. It said **80%**.
 
 That number is not a fact about an eighty-year-old woman. It is a fact about the software, wearing her name.
 
-CareBridge is what I built after sitting with that problem. Medicine reminders that play in a family member's own recorded voice. This post is what it does, how it is put together, and which parts of Google Cloud carry which job.
+**CareBridge** is what I built after sitting with that problem. Medicine reminders that play in a family member's own recorded voice — because a familiar voice gets answered and a chime gets ignored.
+
+It runs today. Two Cloud Run services, an Android app on a real handset, and one household using it daily. This post is what it does, how it is put together, and which parts of Google Cloud carry which job.
+
+The live app is at [carebridge-web-gdjifq5mea-uc.a.run.app](https://carebridge-web-gdjifq5mea-uc.a.run.app/), and the code is [on GitHub](https://github.com/valetisreedevi/carebridge).
 
 ---
 
@@ -32,7 +36,9 @@ Then, before you trust it with anything, you press **Test the locked screen**. T
 
 **8pm arrives.** Her phone is locked, face-down, on silent. It lights up anyway. A tone rings for about two and a half seconds first. The phone is across the room. A voice that starts before she is looking at it is a voice she misses. Then your recording plays.
 
-**She answers however she can.** She can speak — the screen, the prompt and the listening are all in Telugu if that is the household's language. Or she can press one very large button. The buttons do not go anywhere near the AI. They write the dose directly. If the model is down, or slow, or having a bad day, the tablet still gets recorded.
+**She answers however she can.** She can speak. If the household's language is Telugu, then it is Telugu all the way down — the screen, the spoken prompt, the listening, and the reply. Not an English app with a translated label on it. The medicine name stays exactly as her daughter typed it, in the script it was written in, because that is the one word nobody should be creative with.
+
+Or she can press one very large button. The buttons do not go anywhere near the AI. They write the dose directly. If the model is down, or slow, or having a bad day, the tablet still gets recorded.
 
 She can also snooze. Ten minutes, or twenty, her choice.
 
@@ -80,6 +86,30 @@ The reminder tone is tagged as alarm audio. It sounds through silent and through
 
 The model can move a dose through its lifecycle only by calling a tool that re-validates the move server-side, inside that transaction. It has no `elder_id` parameter to pass. Identity comes from the authenticated caller, so there is no phrasing that reaches another household's records.
 
+---
+
+## The agent's hardest job is not answering
+
+Ask most people what the AI does here and they will guess *understands what she said*. It is the opposite. The most important thing this agent does is decline to interpret.
+
+An elderly person answering a phone at 8pm says things like *okay*. Or *I will*. Or *mm*. Or nothing at all. Every one of those is a plausible yes. Every one of them is also a plausible *I didn't hear you*.
+
+So the instruction is explicit about it:
+
+> Never treat an ambiguous reply as a confirmation. "Okay", "alright", "mm", "I will" and silence are not confirmations.
+
+When the agent cannot tell, it asks one short question — *Have you taken it just now?* — and if that still does not resolve it, it records nothing and says so. The reminder carries on exactly as it would have. If it keeps happening, the family is told.
+
+The reasoning is written into the prompt, and it is the sentence the whole system turns on:
+
+> A confirmation nobody actually gave is the worst thing this system can produce: the family stop worrying, the reminder stops, and the tablet is still on the table.
+
+A false negative costs a repeated reminder. A false positive costs everything the product is for.
+
+Three more rules earn their place. **Nothing is said that a tool did not return** — *if a tool did not return it, you do not know it*, which is how a language model stops inventing a dose. **Medicine names are never translated or spelled out phonetically**, because the wrong medicine name is the one mistake this system exists to prevent. And **times are never reformatted**: tools hand the model a time already phrased the way that family says it, in their language, and the model repeats it verbatim rather than deciding a second time whether 7pm is evening or night.
+
+None of this is enforced by the model. It is prompt-level, and the product's own documentation says so plainly. What *is* enforced is underneath: every status change re-validated in a transaction, and two very large buttons that bypass the agent completely. The intelligence is allowed to be helpful. It is not allowed to be the last line of defence.
+
 **Cloud Text-to-Speech** speaks the agent's replies on the web client. At 0.9× rate, for an older listener. Cached, so the same handful of phrases are not re-synthesised and re-billed all day. Behind a 5-second timeout, with a browser fallback. And the endpoint requires a paired-elder token, so only a real phone can spend synthesis quota.
 
 **Cloud Storage** holds the photos and the voice clips, served as time-limited signed URLs. **Secret Manager** holds the worker token and the mail password. Access is granted per secret, not project-wide. The deploy output is discarded, so no token is ever echoed into a build log.
@@ -99,6 +129,8 @@ The alerts tab is scoped to the caregiver, not to the elder you are currently lo
 There is no rate limiting, no retention policy, and no monitoring beyond whatever Cloud Run captures by default.
 
 The database security rules exist in the repository, but they are not deployed. Clients never touch the database directly, so nothing is exposed. I would still rather say that precisely than let a file in a folder imply more than it does.
+
+That list is not modesty. It is the same discipline as the rest of the product, pointed at myself. A system that will not guess what an elderly woman meant should not guess what its own security posture is either.
 
 ---
 
