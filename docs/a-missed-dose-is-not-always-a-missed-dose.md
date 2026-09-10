@@ -139,18 +139,18 @@ The email goes one per recipient so a care team never gets accidentally introduc
 Ten APIs, all enabled from one block in the deploy script.
 
 ```
-SERVICE                  JOB                        THE DELIBERATE PART
------------------------  -------------------------  ------------------------------
-Cloud Run (x2)           API + dashboard            min-instances 0; caps at 5 / 3
-Firestore                the medical record         transitions inside a txn, 409
-Cloud Scheduler          fires the worker, 1/min    OIDC + constant-time secret
-Firebase Cloud Msg       wakes the handset          data-only; alarm-usage audio
-Firebase Auth            caregiver + device ids     revocation check on every call
-Vertex AI + Gemini       the conversation           analyst agent has zero tools
-Cloud Text-to-Speech     speaks the reply           cached; 0.9x rate; 5s timeout
-Cloud Storage            photos, voice clips        bucket-scoped role, not global
-Secret Manager           worker token, mail pw      per-secret access; no log echo
-Cloud Build / Artifacts  builds from source         3 roles, not project editor
+SERVICE                WHAT IT DOES, AND THE DELIBERATE PART
+---------------------  ---------------------------------------
+Cloud Run  x2          API + dashboard; min-instances 0
+Firestore              the record; transitions inside a txn
+Cloud Scheduler        fires the worker 1/min; OIDC + secret
+Firebase Cloud Msg     wakes the handset; data-only, alarm
+Firebase Auth          two identities; revocation checked
+Vertex AI + Gemini     the conversation; analyst has 0 tools
+Cloud Text-to-Speech   speaks the reply; cached, 0.9x, 5s cap
+Cloud Storage          photos + voice; bucket-scoped role
+Secret Manager         tokens; per-secret, never logged
+Cloud Build            builds from source; 3 roles, not editor
 ```
 
 A few of those deserve a sentence.
@@ -185,25 +185,17 @@ A false negative costs a repeated reminder. A false positive costs everything th
 
 Three other rules earn their place. Nothing gets said that a tool didn't return (*if a tool did not return it, you do not know it*), which is how you stop a language model inventing a dose. Medicine names are never translated or spelled out phonetically. And times never get reformatted: the tools hand the model a time already phrased the way that family says it, and the model repeats it back rather than deciding for a second time whether 7pm counts as evening or night.
 
-None of that is enforced by the model, though. It's prompt-level, and the documentation says so rather than implying otherwise. What's actually enforced sits underneath:
+None of that is enforced by the model, though. It's prompt-level, and the documentation says so rather than implying otherwise. What's actually enforced sits underneath, and it splits three ways.
 
-```
-   the model MAY                    only the server DECIDES
-   ------------------------------   ------------------------------
-   read the current reminder        whether a transition is legal
-   ask a clarifying question        which elder this caller is
-   phrase a reply in her language   whether a dose is already closed
-   call a tool to REQUEST a change  what finally gets written
-   record "I could not understand"
-                                    and two very large buttons
-   it may NOT                       reach the transaction
-   ------------------------------   without the model at all
-   pass an elder_id
-   reopen a finished dose
-   change a dose or a schedule
-```
+**The model may:** read the current reminder, ask one clarifying question, phrase a reply in her language, request a change by calling a tool, and record that it couldn't understand her.
 
-The tools take no `elder_id` parameter, so identity comes from the authenticated caller and there's no phrasing that gets you into another household's records. There are two agents, and the split matters: the companion agent talks to the elder and holds seven tools, while the analyst agent that writes alert wording has zero tools and an eight-second timeout. An alert never waits on a model.
+**The model may not:** pass an `elder_id`, reopen a finished dose, or change a dose, a schedule or a food instruction.
+
+**Only the server decides:** whether a transition is legal, which elder this caller actually is, whether a dose is already closed, and what finally gets written.
+
+The tools take no `elder_id` parameter, so identity comes from the authenticated caller and there's no phrasing that gets you into another household's records. And the two large buttons on the elder's screen reach that transaction without the model being involved at all, which means a total Gemini outage still records a tablet.
+
+There are two agents, and the split matters. The companion agent talks to the elder and holds seven tools. The analyst agent that writes alert wording has zero tools and an eight-second timeout, so an alert never waits on a model.
 
 The intelligence is allowed to be helpful. It isn't allowed to be the last line of defence.
 
