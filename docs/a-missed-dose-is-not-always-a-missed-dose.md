@@ -18,7 +18,7 @@ That number is not a fact about an eighty-year-old woman. It is a fact about the
 
 It runs today. Two Cloud Run services, an Android app on a real handset, and one household using it daily. This post is what it does, how it is put together, and which parts of Google Cloud carry which job.
 
-The live app is at [carebridge-web-gdjifq5mea-uc.a.run.app](https://carebridge-web-gdjifq5mea-uc.a.run.app/), and the code is [on GitHub](https://github.com/valetisreedevi/carebridge).
+The code is [on GitHub](https://github.com/valetisreedevi/carebridge).
 
 ---
 
