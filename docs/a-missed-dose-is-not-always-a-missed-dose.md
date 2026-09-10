@@ -1,9 +1,5 @@
 # The Hardest Part Wasn't the Reminder. It Was Knowing What Happened.
 
-*CareBridge plays a medicine reminder in a family member's own recorded voice. The harder problem was telling a daughter the truth about what happened next.*
-
----
-
 It's 7:55 in the morning and Meera is watching a meeting invite turn from grey to green.
 
 Two hundred kilometres away, her mother is awake, in the kitchen, doing the small things people do before the day starts properly. On the counter there's a strip of tablets. One of them is due at eight.
@@ -84,8 +80,6 @@ The fix wasn't a better notification. It was refusing to collapse four states in
 
 A dose moves through stages, and each stage belongs to somebody:
 
-*⬇ DROP IMAGE HERE — d2_states.png (The Reminder State Model) ⬇*
-
 **Scheduled** is what the doctor said. **Asked** means we got as far as a phone. **Answered** means she replied. **Taken** is what she told us.
 
 The gaps between those stages are the entire product. A dose stuck between *scheduled* and *asked* is my failure. A dose sitting at *asked* at 8:02 isn't anyone's failure yet. Only a dose that reached *answered* tells you anything at all about her.
@@ -116,11 +110,7 @@ Care isn't usually one person, either. One account covers everyone you look afte
 
 ## How it actually works
 
-*⬇ DROP IMAGE HERE — d1_workflow.png (End-to-End Care Workflow) ⬇*
-
 Underneath that, the machinery:
-
-*⬇ DROP IMAGE HERE — d4_layers.png (System Architecture) ⬇*
 
 **Firestore holds the record**, and every dose is a small state machine. What matters is that transitions are validated *inside* a transaction: an illegal move returns a 409, and a dose that's already taken can't be quietly reopened by a retry, by the model, or by someone double-tapping a button. The states aren't a label on the data. They're enforced.
 
