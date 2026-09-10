@@ -53,7 +53,7 @@ that fires the reminder immediately instead of waiting for the clock. Then
 
 ```bash
 cd backend
-pytest                       # 229 tests, no network needed
+pytest                       # 254 tests, no network needed
 python scripts/e2e_demo.py   # real Firestore, real GCS, real Gemini
 ```
 
@@ -144,9 +144,10 @@ Every one of these has a test.
 
 ## Authentication
 
-`AUTH_ENABLED=false` (the default) lets callers identify themselves with an
-`X-Caregiver-Id` or `X-Elder-Id` header. That is for local development and
-demos only.
+`AUTH_ENABLED=false` — the default in `settings.py`, and overridden to `true`
+by `deploy.sh` — lets callers identify themselves with an `X-Caregiver-Id` or
+`X-Elder-Id` header. That is for local development only; the deployed service
+runs with authentication on.
 
 With `AUTH_ENABLED=true` caregivers must present a Firebase ID token, and elder
 devices must present one carrying an `elder_id` claim, obtained by exchanging
@@ -173,24 +174,46 @@ Note that Gemini 3.x is served from Vertex's **global** endpoint, not a region.
 
 ## Known gaps
 
-- **No reminder has ever reached a real phone.** FCM dispatch is wired and
-  logged, but no device has registered a token, so delivery is unproven.
-- **The Android app has never been compiled.** It was written on a machine
-  with no JDK or Android SDK. Open it in Android Studio and expect to fix
-  dependency-version drift. See `elder-android/README.md`.
-- **Signed URLs need a service-account key.** On local user credentials
-  signing is unavailable, so media falls back to streaming through the API.
-  On Cloud Run the deployed service account can sign.
+- **Delivery cannot be confirmed.** A dose counts as *asked* when a device is
+  registered, or when the elder replies. Neither is a delivery receipt. See
+  "What is still unproven" below.
+- **The conversational agent has no timeout.** The analyst agent used for the
+  weekly note runs under an eight-second timeout with a deterministic
+  fallback, so escalation never waits on a model. The companion agent has no
+  equivalent guard; a stalled call blocks one spoken turn until the platform
+  request timeout. The button controls bypass the agent entirely, so a dose is
+  still recordable.
+- **Declining has no button.** `record_decline` works end to end and is
+  tested, but neither client exposes a control for it — a decline can only be
+  recorded by speaking.
+- **The caregiver alert list is not elder-scoped.** A caregiver looking after
+  two people sees both sets of alerts in one list.
 - **Multi-caregiver escalation is single-tier.** Every caregiver on the elder
   gets the same alert; there is no primary/secondary/emergency ladder yet.
-- **English only.** The data model carries `preferred_language` and the
-  clients pass a speech tag, but the prompt and the UI copy are English.
+- **Two languages, not five.** English and Telugu are complete end to end —
+  agent prompt, spoken time phrasing, UI copy and the Android client. Hindi,
+  Tamil and Kannada have a synthesised voice and a speech tag but no interface
+  copy, so an elder set to Hindi would hear a Hindi voice reading an English
+  time phrase.
+- **Database rules are defined, not deployed.** `infrastructure/` holds
+  deny-all Firestore and Storage rules, and no client touches either directly,
+  but `deploy.sh` does not apply them.
+- **No rate limiting, monitoring or retention policy.** Pairing is protected by
+  code entropy and an identical failure response, not by throttling. Logs are
+  unstructured and nothing is alerted on. Records are never deleted.
 
 ## Deployment status
 
-Live on Cloud Run as `carebridge-api` (revision `00003-zgw`, `us-central1`),
-deployed `--no-allow-unauthenticated` so only identities holding `run.invoker`
-can call it — currently the project owner and the scheduler service account.
+Live on Cloud Run in `us-central1` as two services: `carebridge-api` and
+`carebridge-web`, the latter serving both the caregiver dashboard and the elder
+web client. Both are publicly reachable; the API is gated by application-layer
+authentication rather than the invoker policy (see *Authentication in the
+deployed service*).
+
+The worker endpoint is the exception. `POST /api/internal/reminders/process`
+requires both a Cloud Scheduler identity token and a shared secret compared in
+constant time, and the service refuses to start if that secret is still the
+placeholder published in this repository.
 
 Cloud Scheduler drives `POST /api/internal/reminders/process` every minute,
 and that loop is verified in production, not just locally:
@@ -215,16 +238,23 @@ python backend/scripts/verify_escalation.py "$URL"  # scheduler drives it alone
 to touch the system, so a scheduler that is not actually driving the loop
 fails. It caught a production-only bug that every local test passed through.
 
-### Before anyone else uses this
+### Authentication in the deployed service
 
-The API runs with `AUTH_ENABLED=false`, which is safe *only* because the
-service is not publicly invokable. Two things must happen together before that
-changes: complete `infrastructure/FIREBASE_SETUP.md`, then redeploy (the
-`AUTH_ENABLED` default is already `true`).
+The API runs with `AUTH_ENABLED=true`. Every caregiver request carries a
+Firebase ID token verified server-side, and every elder-scoped route re-checks
+the caller against that elder's care team — a client-supplied elder id is never
+trusted on its own. Elder devices hold a separate credential and are rejected
+where a caregiver account is required.
+
+The service is publicly invokable, which is deliberate: application-layer
+authentication is the gate, not the Cloud Run invoker policy. `deploy.sh` pairs
+the two, granting public invocation only when `AUTH_ENABLED=true`.
 
 ### What is still unproven
 
-Reminders reach the *loop*, not yet a *person*. Every dispatch so far has
-logged `-> 0 device(s)` because no device has ever registered an FCM token, so
-no elder's phone has actually rung. Proving that needs the Android app built
-and paired on a real handset.
+CareBridge cannot confirm that a reminder reached a handset. A dose is counted
+as *asked* when a device is registered for the elder, or when she replies —
+registration is a database fact, not a delivery receipt, and the push result
+means "accepted for delivery", not "arrived". The one unambiguous evidence of
+arrival is a reply, and a reply is what sets that flag. The interface says
+"had somewhere to send to", never "was received".
