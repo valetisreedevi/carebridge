@@ -1,4 +1,4 @@
-# Your dashboard is blaming somebody's mother for your outage
+# She hears her daughter's voice at 8pm
 
 It is 11:40pm. A woman in another city opens an app to check on her mother.
 
@@ -8,227 +8,99 @@ She scrolls back through the week looking for a pattern. She wonders about the e
 
 Here is what actually happened.
 
-Her mother's phone never finished pairing. The setup flow lost her on the notification permission screen — the one with two buttons that look the same. Two reminders were raised. Neither left our servers for a device that existed.
+Her mother's phone never finished pairing. The setup flow lost her on the notification permission screen — the one with two buttons that look the same. Two reminders were raised. Neither left the server for a device that existed.
 
 The app did not say that. It said **80%**.
 
-That number is not a fact about an eighty-year-old woman. It is a fact about my software, wearing her name.
+That number is not a fact about an eighty-year-old woman. It is a fact about the software, wearing her name.
 
-I built [CareBridge](https://github.com/valetisreedevi/carebridge) — medicine reminders in a family member's own recorded voice. Not the recording and not the scheduling: *this* became the problem the whole system is organised around.
-
----
-
-## A missed dose isn't always a missed dose
-
-Sit with an unanswered dose. Four different things end up under one word.
-
-1. **She forgot.** The one case everybody assumes.
-2. **She heard it and hasn't answered yet.** It is 8:02. Nobody has failed.
-3. **The phone was switched off, or out of battery, or in the next room.** The reminder went out. It arrived nowhere.
-4. **It never reached her at all.** No device paired, no permission, no delivery.
-
-They are not the same thing, and only one of them is about the person at all.
-
-`taken / scheduled` cannot tell them apart. Worse, it *asserts* they are the same. Three of the four are not about her. Two of them are about me.
-
-Every product in this category ships that number anyway. It is the obvious one to show. The alternative means admitting things on a screen a customer is looking at.
+CareBridge is what I built after sitting with that problem. Medicine reminders that play in a family member's own recorded voice. This post is what it does, how it is put together, and which parts of Google Cloud carry which job.
 
 ---
 
-## Three numbers. Not one.
+## One dose, end to end
 
-The fix is structural, not cosmetic. Every dose gets classified along two independent axes.
+**You record the reminder once.** Not a text field — your actual voice, saying the actual sentence. *Amma, it's eight o'clock, time for your blood pressure tablet.*
 
-**Reach** — did we manage to ask? *Ours to answer for.*
-**Outcome** — what did she say? *Hers.*
+You add the dose, the times, and whether it is taken with food. And a photo of the strip, because a white tablet looks like every other white tablet.
 
-They are orthogonal. Collapsing them into one percentage is the original sin.
+If it is a ten-day course, you say so. Ten days means ten days. It stops on its own, so nobody has to remember to stop it.
 
-Here is the reach classifier, in full:
+**You pair her phone with a code.** Ten characters, good for 72 hours, single use. It is redeemed inside a database transaction, so the same code cannot be spent twice. A wrong code, a spent code and an expired code all produce the identical refusal. There is nothing to learn by guessing.
 
-```python
-def classify_reach(event: dict) -> Reach:
-    """A dose is only UNDELIVERED once we have actually tried and failed.
+Then, before you trust it with anything, you press **Test the locked screen**. Ten seconds later her phone does exactly what it will do at 8pm. You watch it happen once, in the room, instead of finding out on a night that matters.
 
-    A dose still ahead of its time has not failed at anything, and counting it
-    against the household is how a dashboard cries wolf before breakfast.
-    """
-    if event.get("reached_a_phone"):
-        return Reach.DELIVERED
-    if event.get("attempt", 0) > 0:
-        return Reach.UNDELIVERED
-    return Reach.NOT_YET_TRIED
-```
+**8pm arrives.** Her phone is locked, face-down, on silent. It lights up anyway. A tone rings for about two and a half seconds first. The phone is across the room. A voice that starts before she is looking at it is a voice she misses. Then your recording plays.
 
-Three states, not two. The third one earns its place.
+**She answers however she can.** She can speak — the screen, the prompt and the listening are all in Telugu if that is the household's language. Or she can press one very large button. The buttons do not go anywhere near the AI. They write the dose directly. If the model is down, or slow, or having a bad day, the tablet still gets recorded.
 
-A dose that hasn't come due yet has not failed. With only delivered and undelivered, tomorrow morning's tablets are undelivered right now, and the dashboard is amber at breakfast over doses nobody was meant to have taken. Cries wolf before breakfast. And a dashboard that cries wolf gets ignored on the day it is right.
+She can also snooze. Ten minutes, or twenty, her choice.
 
-`reached_a_phone` is stored, never derived. It only ever moves from false to true. A dose delivered once was genuinely asked about, whatever happened to the handset afterwards.
+**If nobody answers**, a second reminder goes out ten minutes later. If that goes unanswered too, at about the twenty-minute mark it stops trying and tells a person. The care team gets a push, then an email five minutes behind it.
+
+The email does not name the medicine in the subject line. It will land on a lock screen, in a room that may have other people in it.
+
+**And the care team is a team.** One account, everyone you look after — your mother's morning and your father's evening in the same place. Invite your brother, your sister, the neighbour who has a key. Each of them is told separately, in their own message, so nobody has to be the only one carrying it.
 
 ---
 
-## Make the invariant a partition, then assert it
+## Three numbers, not one
 
-The ledger is a frozen dataclass. Its comments carry the whole argument:
+Now back to that 80%.
 
-```python
-@dataclass(frozen=True)
-class Ledger:
-    """One window of doses, counted along both axes.
+An unanswered dose is four different things wearing one word. She forgot. She heard it and hasn't answered yet — it is 8:02, nobody has failed. The phone was off, or flat, or in the next room. Or it never reached her at all, because no phone was ever set up.
 
-    REACH partitions the window exactly:
+Only one of those is about her. Two of them are about me.
 
-        scheduled == asked + unreachable + not_yet_due
+So CareBridge does not show one number. It shows three: what the doctor prescribed, what we actually managed to ask about, and what came back as an answer. They add up. A family can check the arithmetic themselves, which is a different kind of object from one number you are asked to believe.
 
-    That identity is asserted in the tests. It is what lets the dashboard show
-    three numbers that a family can add up themselves, instead of one number
-    they have to trust.
-    """
+A dose we never delivered is not labelled *Missed*. It is labelled **"Missed — no reminder sent."** Four extra words, and the whole meaning of the row moves from *she didn't* to *we didn't*.
 
-    scheduled: int = 0
+When the numbers do not reconcile, the dashboard says so, in a badge naming who is responsible: **ours to fix**. The bar segment for those doses is not red. It is hatched grey — deliberately not another shade of bad, because it is not her failure.
 
-    # Reach — ours to answer for.
-    asked: int = 0
-    unreachable: int = 0
-    not_yet_due: int = 0
-
-    # Outcome — hers.
-    taken: int = 0
-    declined: int = 0
-    no_answer: int = 0
-    waiting: int = 0
-    cancelled: int = 0
-```
-
-Those two comments are the most load-bearing lines in the repository. Every argument about what a number means gets settled by asking which side of the line it falls on. I have not had to relitigate one since.
-
-The identity in that docstring is not documentation. It is a partition, and it is enforced:
-
-```python
-@property
-def balances(self) -> bool:
-    return self.scheduled == self.asked + self.unreachable + self.not_yet_due
-```
-
-```python
-assert ledger.scheduled == 6
-assert ledger.asked == 4
-assert ledger.unreachable == 1
-assert ledger.not_yet_due == 1
-assert ledger.balances
-```
-
-This is the part I would transplant into any other project. Once reach is a real partition, the family can check my arithmetic themselves. Three numbers that add up are a different kind of object from one number you are asked to believe. If they stop adding up, that is a bug in my accounting — not an ambiguity for an anxious person to absorb at midnight.
-
-What the doctor prescribed. What we actually managed to ask about. What came back as an answer. Three different facts, kept apart on purpose.
-
-Cancelled doses sit outside the partition, deliberately. A medicine the family stopped is not a dose anyone was asked to take. Leaving it in the denominator makes *stopping a medicine* look like a week of misses. The test says so out loud:
-
-```python
-"""Stopping a medicine must not read as a week of misses."""
-```
-
-That was a real bug before it was a rule.
+One honest limit, stated plainly here and in the product's own documentation: CareBridge knows it had a registered device to send to. It does not know the notification arrived. Nothing short of an answer from her proves that, and the system never pretends otherwise.
 
 ---
 
-## The denominator is where the honesty lives
+## How it is built
 
-One function, if I could only show one:
+Two Cloud Run services. A FastAPI backend and a React dashboard, each built straight from source. Both sit at `--min-instances 0`, so a system nobody is currently using costs nothing to keep alive. The API caps at five instances, the web at three.
 
-```python
-def adherence_of_asked(ledger: Ledger) -> float | None:
-    """Taken as a share of the doses we actually managed to ask about.
+**Firestore is the record.** Every dose is a small state machine — pending, reminder sent, snoozed, taken, declined, escalated, cancelled — and every transition is validated *inside* a transaction. An illegal move gets a 409. A dose that is already taken cannot be quietly reopened, not by a retry, not by the model, not by a caregiver pressing something twice.
 
-    Deliberately not over everything scheduled. Dividing by doses that were
-    never delivered measures our own plumbing and reports the result as her
-    behaviour.
-    """
-```
+**Cloud Scheduler is the heartbeat.** One job, every minute, calling the reminder worker. That endpoint is guarded twice: an OIDC identity token that Cloud Run itself checks, and an application-level shared secret compared in constant time. Either alone would probably do. It is a URL that can make somebody's phone ring at 3am, so it has both.
 
-*Measures our own plumbing and reports the result as her behaviour.*
+**Firebase Cloud Messaging wakes the handset.** Android gets data-only messages, at high priority, deliberately. The system tray cannot produce a full-screen wake on a locked phone. So the app owns that behaviour instead of handing it to the OS.
 
-That sentence is the whole post. It is also uncomfortable to ship, because the honest denominator makes the product look worse in exactly the situations where the product **is** worse. When delivery gets flaky, `asked` drops. You end up staring at your own reliability instead of a comfortable number about somebody's mother.
+The reminder tone is tagged as alarm audio. It sounds through silent and through Do Not Disturb — which is where an elderly person's phone usually lives.
 
-The dishonest denominator launders your outages through someone else's adherence score.
+**Firebase Authentication handles two very different identities.** Caregivers sign in normally. The elder's phone signs in with a custom token carrying an `elder_id` claim, minted only after a pairing code is redeemed. Every call from that phone is verified with a revocation check, so *Sign out all phones* takes effect immediately rather than whenever a cached token happens to expire. An elder device token is explicitly rejected if it is ever presented as a caregiver credential.
 
-That is the trade. It is why almost nobody makes it. It is not really a technical decision.
+**Gemini 3.6 Flash, through the Agent Development Kit, on Vertex AI.** Two agents, and the split is the interesting part. The companion agent talks to the elder and holds seven tools. The analyst agent that writes alert wording has **zero tools** and an eight-second timeout — it can rephrase numbers it is handed, and it cannot touch a record. An alert never waits on a model. If the analyst is slow, deterministic wording ships instead.
 
----
+The model can move a dose through its lifecycle only by calling a tool that re-validates the move server-side, inside that transaction. It has no `elder_id` parameter to pass. Identity comes from the authenticated caller, so there is no phrasing that reaches another household's records.
 
-## Ours to fix, and we say so
+**Cloud Text-to-Speech** speaks the agent's replies on the web client. At 0.9× rate, for an older listener. Cached, so the same handful of phrases are not re-synthesised and re-billed all day. Behind a 5-second timeout, with a browser fallback. And the endpoint requires a paired-elder token, so only a real phone can spend synthesis quota.
 
-An honest model that the interface averages away has achieved nothing. So the vocabulary survives all the way out.
+**Cloud Storage** holds the photos and the voice clips, served as time-limited signed URLs. **Secret Manager** holds the worker token and the mail password. Access is granted per secret, not project-wide. The deploy output is discarded, so no token is ever echoed into a build log.
 
-The label for a dose that was never delivered is not "Missed":
+The detail I am most pleased with is the least glamorous. The deploy script does not only grant permissions — it **removes** them. Earlier versions had given the API service account project-wide storage and token-signing rights. The script now narrows both to the single media bucket and to the account signing as itself, and actively deletes the old broad grants every time it runs. The infrastructure repairs its own history.
 
-```ts
-MISSED: "Missed — no reminder sent",
-```
-
-Four extra words. They move the whole meaning of the row from *she didn't* to *we didn't*.
-
-When the numbers don't reconcile, the dashboard says why, in a badge that names who is responsible:
-
-> **ours to fix** — 2 doses were never asked about, no reminder reached the phone.
-
-Not "2 missed". Not a red ring. A sentence admitting we failed — in a product built for people already inclined to blame themselves, and already inclined to blame their parents.
-
-The bar segment for those doses isn't red either. The green is what they answered, the amber is still waiting, and the hatched grey is the part we never delivered. Deliberately not styled like a failure by a person. Because it isn't one.
-
-One smaller detail I am fond of. Doses a caregiver marked taken on someone's behalf are counted separately, as `taken_on_trust`. They are real. They are not lies. But they are not the same evidence as an eighty-year-old pressing the button herself, and quietly merging the two would corrupt the one number the family most wants to lean on.
+Two things worth naming so they are not miscredited. Speech *recognition* is not a Google Cloud service here — it is the browser's Web Speech API and Android's on-device recogniser. And the escalation email is ordinary SMTP, not a managed mail product.
 
 ---
 
-## Where I got it wrong. Twice.
+## What I would fix next
 
-Here is the part that makes me wince. It is also the part worth reading, because it shows what this way of thinking does *not* protect you from.
+The companion agent has no timeout. The analyst got one, and the elder-facing path did not — a slow model can block her turn until Cloud Run gives up at 120 seconds. The clients degrade gracefully and the big buttons still work, but it is the one genuine hole in an otherwise careful failure design, and I know exactly where it is.
 
-The endpoint the elder's phone polls — *what should I show right now?* — filtered on status alone. A dose stays open until somebody answers it. The only things that answer one are the elder, or a worker deciding it is exhausted. There was no comparison against the clock anywhere in that query.
+The alerts tab is scoped to the caregiver, not to the elder you are currently looking at. With two parents in one account, the badge counts both. It is a real bug, not a design choice.
 
-So a dose raised while no phone was paired stayed *happening right now*. For ever. The next device to pair got handed it.
+There is no rate limiting, no retention policy, and no monitoring beyond whatever Cloud Run captures by default.
 
-Somebody finished setting up their mother's phone and it immediately played her daughter's recorded voice about eye drops from four hours earlier.
-
-The fix reuses a rule the domain already had: a dose stops being live once it passes its escalation window. Its docstring is now the longest in the service, because I did not want the next person to rediscover this:
-
-```python
-"""Every reminder still waiting on an answer, earliest first.
-
-`live_within` is how long after its scheduled time a dose is still the
-thing the elder is being asked about. Without it a reminder is open
-until something closes it, and the only things that close one are an
-answer from the elder or the worker deciding it is exhausted. A dose
-raised while no phone was paired has neither, so it stayed open for
-ever and was handed to the next device to pair — which then rang about
-eye drops from hours ago the moment it finished pairing.
-"""
-```
-
-Now the wince. **Three days later the same bug bit again, somewhere else.**
-
-`/reminders/active` had been given its clock. `/my/today` — the elder's own day list, a different endpoint over the same events — never had one. No event is ever written as `MISSED`, so an unanswered dose sits in `REMINDER_SENT` indefinitely, and that screen mapped every open dose to "now".
-
-The result: a screen reading **"Nothing to take right now"** directly above a row insisting a four-hour-old dose was due.
-
-Same root cause. Same repository. Same week.
-
-I had fixed the instance rather than the class. The most ordinary mistake there is.
-
-I had been rigorous about *whose fault* a dose was and careless about *when* it was. Then, having noticed that, careless about how many places were careless about it.
+The database security rules exist in the repository, but they are not deployed. Clients never touch the database directly, so nothing is exposed. I would still rather say that precisely than let a file in a folder imply more than it does.
 
 ---
-
-## The transferable bit
-
-Strip out the medicine. The shape holds for anything acting on behalf of someone who isn't watching — notifications, deliveries, alerting, IoT, dunning emails, any status page.
-
-1. **Separate "did we deliver?" from "what did they do?"** Different questions. Different owners. One metric spanning both is a metric that assigns your failures to your users.
-2. **Make the delivery axis a partition and assert it in a test.** Numbers that add up can be checked. Numbers that don't must be trusted, and trust is what you spend when you have run out of evidence.
-3. **Never put undelivered attempts in the denominator of a user-behaviour metric.** That is the line where measuring your infrastructure becomes libelling your user.
-4. **Carry the vocabulary to the interface.** "Missed" and "we never asked" must not render identically, or the model was decoration.
-5. **Add a clock. Then go and find everywhere else that needs one.** Correct attribution of a stale fact is still a stale fact. And you almost certainly wrote the bug more than once.
 
 None of this made CareBridge more impressive in a demo.
 
@@ -238,4 +110,4 @@ That seemed like the part worth getting right.
 
 ---
 
-*CareBridge is a family medicine-care system: FastAPI on Cloud Run, Firestore, Gemini via the Agent Development Kit, a React caregiver dashboard, and an Android app for the elder's phone. Every snippet above is copied verbatim from the repository, which is at [github.com/valetisreedevi/carebridge](https://github.com/valetisreedevi/carebridge).*
+*CareBridge: FastAPI on Cloud Run, Firestore, Firebase Auth and Cloud Messaging, Cloud Scheduler, Cloud Storage, Secret Manager, Cloud Text-to-Speech, and Gemini 3.6 Flash via the Agent Development Kit on Vertex AI. A React dashboard for the family, an Android app for the elder's phone. English and Telugu, end to end. The code is at [github.com/valetisreedevi/carebridge](https://github.com/valetisreedevi/carebridge).*
