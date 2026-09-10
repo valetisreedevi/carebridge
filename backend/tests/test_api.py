@@ -500,6 +500,71 @@ def test_a_taken_dose_reads_as_taken_on_the_elders_own_screen(client, db):
     assert states.count("taken") == 1
 
 
+def test_a_dose_the_queue_has_given_up_on_no_longer_reads_as_due_now():
+    """The two halves of the elder screen must agree about the same dose.
+
+    A reminder that goes unanswered stays REMINDER_SENT for ever — no event is
+    ever written as MISSED — so the day list called a four-hour-old dose "due
+    now" while the top of the same screen, which does have a clock, was already
+    saying "Nothing to take right now".
+
+    The rule is tested on its own clock rather than the machine's. Written
+    against the real day endpoint, this passed all day and failed for the four
+    hours after midnight in the elder's timezone: a dose four hours old is
+    yesterday's at 00:07, and drops off today's list before it can be read.
+    """
+    from datetime import datetime, timedelta as delta, timezone as tz
+
+    from app.api.elders import _elder_state
+
+    window = delta(minutes=90)
+    noon = datetime(2026, 9, 9, 12, 0, tzinfo=tz.utc)
+    dose = {"status": "REMINDER_SENT", "scheduled_at": noon}
+
+    assert _elder_state(dose, noon + delta(minutes=1), window) == "now"
+    assert _elder_state(dose, noon + delta(minutes=89), window) == "now"
+    assert _elder_state(dose, noon + delta(minutes=90), window) == "missed"
+    assert _elder_state(dose, noon + delta(hours=4), window) == "missed"
+
+    # Every status that means "open" ages the same way. ESCALATED is the one
+    # the ladder actually leaves behind, and it is terminal.
+    for status in ("PENDING", "SNOOZED", "ESCALATED"):
+        stale = {"status": status, "scheduled_at": noon}
+        assert _elder_state(stale, noon + delta(hours=4), window) == "missed"
+
+    # An answered dose is not aged out of its answer, and a scheduled time the
+    # worker never materialised has no scheduled_at to age against.
+    taken = {"status": "TAKEN", "scheduled_at": noon}
+    never_fired = {"status": "MISSED", "scheduled_at": None}
+    assert _elder_state(taken, noon + delta(hours=4), window) == "taken"
+    assert _elder_state(never_fired, noon + delta(hours=4), window) == "missed"
+
+
+def test_a_dose_still_being_asked_about_reads_as_due_now(client, db):
+    """The clock must not reach back and grey out a live reminder."""
+    from datetime import datetime, timezone as tz
+
+    from app.services.medication_event_service import MedicationEventService
+
+    elder_id, medication_id = _elder_with_medication(client)
+
+    events = MedicationEventService(db)
+    now = datetime.now(tz.utc)
+    event_id = events.create_event(
+        medication_id=medication_id,
+        elder_id=elder_id,
+        scheduled_at=now,
+        retry_after_minutes=10,
+        max_attempts=2,
+    )
+    events.record_reminder_sent(event_id, now)
+
+    day = client.get("/api/my/today", headers={"X-Elder-Id": elder_id}).json()
+    states = [i["state"] for i in day["items"]]
+
+    assert states.count("now") == 1
+
+
 def test_one_elders_phone_cannot_read_another_elders_day(client):
     """The id comes from the device's own token, never from the request."""
     first, _ = _elder_with_medication(client, time="08:00")

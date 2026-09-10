@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -431,6 +431,35 @@ _ELDER_STATE = {
 }
 
 
+def _elder_state(item: dict, now: datetime, live_window: timedelta) -> str:
+    """One word for where a dose stands, on the same clock as the reminder.
+
+    No event ever reaches the status MISSED: an unanswered dose sits in
+    REMINDER_SENT or SNOOZED until the ladder gives up and writes ESCALATED,
+    which is terminal. All three mean "now" in the map, so the day list called
+    a dose due now for the rest of the day — while the top of the very same
+    screen, which reads /reminders/active and does have a clock, had already
+    stopped offering it and said "Nothing to take right now". One screen, two
+    clocks, opposite answers, and the wrong one is the one that asks her to go
+    and take a tablet she has been sitting beside all afternoon.
+
+    So the list borrows the queue's clock. A dose is happening now for exactly
+    as long as the elder is still being asked about it; after that it is one
+    she did not take.
+    """
+    status = item["status"]
+    scheduled_at = item.get("scheduled_at")
+
+    if (
+        scheduled_at is not None
+        and _ELDER_STATE.get(status) == "now"
+        and now >= scheduled_at + live_window
+    ):
+        return "missed"
+
+    return _ELDER_STATE.get(status, "later")
+
+
 @router.get("/my/today")
 def get_my_today(elder_id: str = Depends(current_elder_id)):
     """Today's medicines, for the elder's own phone.
@@ -452,6 +481,8 @@ def get_my_today(elder_id: str = Depends(current_elder_id)):
         raise HTTPException(status_code=404, detail="Elder not found")
 
     day = _today_for(elder)
+    now = datetime.now(timezone.utc)
+    live_window = deps.reminder_service().live_window
 
     return {
         "date": day["date"],
@@ -464,7 +495,7 @@ def get_my_today(elder_id: str = Depends(current_elder_id)):
                 "dose": item["dose"],
                 "food_instruction": item["food_instruction"],
                 "local_time": item["local_time"],
-                "state": _ELDER_STATE.get(item["status"], "later"),
+                "state": _elder_state(item, now, live_window),
                 # Whether to ask for the picture at all. The object name itself
                 # is not her business; a boolean is all the screen needs.
                 "has_photo": bool(item.get("photo_object_name")),
