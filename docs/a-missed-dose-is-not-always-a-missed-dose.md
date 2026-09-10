@@ -70,21 +70,88 @@ One honest limit, stated plainly here and in the product's own documentation: Ca
 
 ## How it is built
 
-Two Cloud Run services. A FastAPI backend and a React dashboard, each built straight from source. Both sit at `--min-instances 0`, so a system nobody is currently using costs nothing to keep alive. The API caps at five instances, the web at three.
+Everything runs on Google Cloud. Two Cloud Run services — a FastAPI backend and a React dashboard, each built straight from source. Both sit at `--min-instances 0`, so a system nobody is currently using costs nothing to keep alive. The API caps at five instances, the web at three.
 
-**Firestore is the record.** Every dose is a small state machine — pending, reminder sent, snoozed, taken, declined, escalated, cancelled — and every transition is validated *inside* a transaction. An illegal move gets a 409. A dose that is already taken cannot be quietly reopened, not by a retry, not by the model, not by a caregiver pressing something twice.
+Here is the whole thing on one page:
 
-**Cloud Scheduler is the heartbeat.** One job, every minute, calling the reminder worker. That endpoint is guarded twice: an OIDC identity token that Cloud Run itself checks, and an application-level shared secret compared in constant time. Either alone would probably do. It is a URL that can make somebody's phone ring at 3am, so it has both.
+```
+   Cloud Scheduler  * * * * *
+          |  OIDC token + worker secret
+          v
+   +------------------+   due doses, state transitions
+   |  reminder worker | <-------------------------> Firestore
+   |  (Cloud Run)     |                             the record
+   +------------------+
+          |  FCM data-only, priority high
+          v
+   [ locked handset ]  tone 2.6s  ->  her daughter's voice
+          |
+     she speaks                        she presses
+          |                                 |
+          v                                 |
+   Gemini 3.6 Flash (ADK, Vertex)           |  bypasses
+   7 tools, no elder_id parameter           |  the agent
+          |                                 |
+          +----------> transaction <--------+
+                       validate + write
+                            |
+                            v
+                    ledger  ->  dashboard
+```
 
-**Firebase Cloud Messaging wakes the handset.** Android gets data-only messages, at high priority, deliberately. The system tray cannot produce a full-screen wake on a locked phone. So the app owns that behaviour instead of handing it to the OS.
+Now follow the 8pm dose through it.
 
-The reminder tone is tagged as alarm audio. It sounds through silent and through Do Not Disturb — which is where an elderly person's phone usually lives.
+**The tick.** Cloud Scheduler fires one job, every minute, at the reminder worker. That endpoint is guarded twice: an OIDC identity token Cloud Run itself checks, and an application-level shared secret compared in constant time. Either alone would probably do. It is a URL that can make somebody's phone ring at 3am, so it has both.
+
+**The read.** The worker asks Firestore which doses are due. Every dose is a small state machine — pending, reminder sent, snoozed, taken, declined, escalated, cancelled — and every transition is validated *inside* a transaction. An illegal move gets a 409. A dose that is already taken cannot be quietly reopened, not by a retry, not by the model, not by a caregiver pressing something twice.
+
+**The push.** Firebase Cloud Messaging wakes the handset. Android gets data-only messages, at high priority, deliberately. The system tray cannot produce a full-screen wake on a locked phone, so the app owns that behaviour instead of handing it to the OS. The tone is tagged as alarm audio, so it sounds through silent and through Do Not Disturb — which is where an elderly person's phone usually lives.
+
+**The answer, by two separate paths.** This is the part of the diagram that matters most. If she speaks, the reply goes to Gemini through the Agent Development Kit. If she presses a button, it does not go near the model at all — it writes the dose directly.
+
+**The write.** Both paths land on the same transaction. Whatever decided it, the state change is re-validated server-side before anything is recorded.
+
+**The ledger.** Which is what her daughter reads at 11:40pm.
 
 **Firebase Authentication handles two very different identities.** Caregivers sign in normally. The elder's phone signs in with a custom token carrying an `elder_id` claim, minted only after a pairing code is redeemed. Every call from that phone is verified with a revocation check, so *Sign out all phones* takes effect immediately rather than whenever a cached token happens to expire. An elder device token is explicitly rejected if it is ever presented as a caregiver credential.
 
 **Gemini 3.6 Flash, through the Agent Development Kit, on Vertex AI.** Two agents, and the split is the interesting part. The companion agent talks to the elder and holds seven tools. The analyst agent that writes alert wording has **zero tools** and an eight-second timeout — it can rephrase numbers it is handed, and it cannot touch a record. An alert never waits on a model. If the analyst is slow, deterministic wording ships instead.
 
-The model can move a dose through its lifecycle only by calling a tool that re-validates the move server-side, inside that transaction. It has no `elder_id` parameter to pass. Identity comes from the authenticated caller, so there is no phrasing that reaches another household's records.
+**Cloud Text-to-Speech** speaks the agent's replies on the web client. At 0.9× rate, for an older listener. Cached, so the same handful of phrases are not re-synthesised and re-billed all day. Behind a 5-second timeout, with a browser fallback. And the endpoint requires a paired-elder token, so only a real phone can spend synthesis quota.
+
+**Cloud Storage** holds the photos and the voice clips, served as time-limited signed URLs. **Secret Manager** holds the worker token and the mail password. Access is granted per secret, not project-wide. The deploy output is discarded, so no token is ever echoed into a build log.
+
+The detail I am most pleased with is the least glamorous. The deploy script does not only grant permissions — it **removes** them. Earlier versions had given the API service account project-wide storage and token-signing rights. The script now narrows both to the single media bucket and to the account signing as itself, and actively deletes the old broad grants every time it runs. The infrastructure repairs its own history.
+
+Two things worth naming so they are not miscredited. Speech *recognition* is not a Google Cloud service here — it is the browser's Web Speech API and Android's on-device recogniser. And the escalation email is ordinary SMTP, not a managed mail product.
+
+---
+
+## When nobody answers
+
+The other flow worth drawing is the one that runs when the first one gets no reply.
+
+```
+   t+0    reminder      attempt 1   phone rings, voice plays
+            |
+            |  no answer
+            v
+   t+10   reminder      attempt 2   same dose, same voice
+            |
+            |  still no answer
+            v
+   t+20   ESCALATE                  stop trying, tell a person
+            |
+            +--> push to the care team
+            |
+            +--> email, 5 minutes later
+                 one message per recipient
+                 no medicine name in the subject
+```
+
+Two attempts, then it stops. A system that keeps ringing an unanswered phone is not being diligent, it is being ignored — and the thing that actually helps at that point is a human being.
+
+The email lands one per recipient, so a care team is never accidentally introduced to itself. And the subject line never names the medicine, because it will appear on a lock screen in a room that may have other people in it.
 
 ---
 
@@ -108,15 +175,29 @@ A false negative costs a repeated reminder. A false positive costs everything th
 
 Three more rules earn their place. **Nothing is said that a tool did not return** — *if a tool did not return it, you do not know it*, which is how a language model stops inventing a dose. **Medicine names are never translated or spelled out phonetically**, because the wrong medicine name is the one mistake this system exists to prevent. And **times are never reformatted**: tools hand the model a time already phrased the way that family says it, in their language, and the model repeats it verbatim rather than deciding a second time whether 7pm is evening or night.
 
-None of this is enforced by the model. It is prompt-level, and the product's own documentation says so plainly. What *is* enforced is underneath: every status change re-validated in a transaction, and two very large buttons that bypass the agent completely. The intelligence is allowed to be helpful. It is not allowed to be the last line of defence.
+None of this is enforced by the model. It is prompt-level, and the product's own documentation says so plainly.
 
-**Cloud Text-to-Speech** speaks the agent's replies on the web client. At 0.9× rate, for an older listener. Cached, so the same handful of phrases are not re-synthesised and re-billed all day. Behind a 5-second timeout, with a browser fallback. And the endpoint requires a paired-elder token, so only a real phone can spend synthesis quota.
+What *is* enforced sits underneath it:
 
-**Cloud Storage** holds the photos and the voice clips, served as time-limited signed URLs. **Secret Manager** holds the worker token and the mail password. Access is granted per secret, not project-wide. The deploy output is discarded, so no token is ever echoed into a build log.
+```
+   the model MAY                    only the server DECIDES
+   ------------------------------   ------------------------------
+   read the current reminder        whether a transition is legal
+   ask a clarifying question        which elder this caller is
+   phrase a reply in her language   whether a dose is already closed
+   call a tool to REQUEST a change  what finally gets written
+   record "I could not understand"
+                                    and two very large buttons
+   it may NOT                       reach the transaction
+   ------------------------------   without the model at all
+   pass an elder_id
+   reopen a finished dose
+   change a dose or a schedule
+```
 
-The detail I am most pleased with is the least glamorous. The deploy script does not only grant permissions — it **removes** them. Earlier versions had given the API service account project-wide storage and token-signing rights. The script now narrows both to the single media bucket and to the account signing as itself, and actively deletes the old broad grants every time it runs. The infrastructure repairs its own history.
+The tools take no `elder_id` parameter. Identity comes from the authenticated caller, so there is no phrasing that reaches another household's records. And every status change the model requests is re-validated in the same transaction as everything else.
 
-Two things worth naming so they are not miscredited. Speech *recognition* is not a Google Cloud service here — it is the browser's Web Speech API and Android's on-device recogniser. And the escalation email is ordinary SMTP, not a managed mail product.
+The intelligence is allowed to be helpful. It is not allowed to be the last line of defence.
 
 ---
 
