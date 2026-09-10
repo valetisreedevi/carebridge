@@ -1,220 +1,237 @@
-# The medicine reminder that refuses to guess
+# The Hardest Part Wasn't the Reminder. It Was Knowing What Happened.
 
-It's 11:40pm and a woman in another city opens an app to check on her mother.
-
-**8 of 10 doses taken.** A progress ring, green above some threshold, amber below. Tonight it's amber.
-
-So she scrolls back through the week looking for a pattern. Maybe it's the evening tablets. Maybe this is the start of something and it's time to have the conversation about moving closer. She doesn't call, because it's late, and because ringing your mother to ask whether she took her tablets is its own small insult.
-
-Here's what actually happened. Her mother's phone never finished pairing. The setup flow lost her on the notification permission screen, the one with two buttons that look basically identical. Two reminders were raised, and neither of them left the server, because there was no device to send them to.
-
-The app didn't say any of that. It said 80%.
-
-That number isn't a fact about an eighty-year-old woman. It's a fact about my software, with her name on it.
-
-I built **CareBridge** after sitting with that problem for a while. It's medicine reminders that play in a family member's own recorded voice, on the theory that a familiar voice gets answered and a chime gets ignored. It runs today: two Cloud Run services, an Android app on a real handset, one household using it daily.
-
-Code is [on GitHub](https://github.com/valetisreedevi/carebridge).
+*CareBridge plays a medicine reminder in a family member's own recorded voice. The harder problem was telling a daughter the truth about what happened next.*
 
 ---
 
-## What CareBridge does
+It's 7:55 in the morning and Meera is watching a meeting invite turn from grey to green.
 
-**Reminders in a real voice.** You record the sentence yourself, once. *Amma, it's eight o'clock, time for your blood pressure tablet.* Her phone plays that, not a synthesised chime.
+Two hundred kilometres away, her mother is awake, in the kitchen, doing the small things people do before the day starts properly. On the counter there's a strip of tablets. One of them is due at eight.
 
-**A medicine list built for people, not pharmacists.** Dose, times, with or without food, and a photo of the strip, because a white tablet looks like every other white tablet. Ten-day courses stop after ten days without anyone remembering to stop them.
+Meera knows this. She knows it the way you know a thing that lives permanently at the back of your head, taking up room, never quite resolved.
 
-**Pairing by code.** Ten characters, good for 72 hours, single use, redeemed inside a transaction so it can't be spent twice. Wrong, used and expired codes all return the same refusal, so there's nothing to learn by guessing.
+She could text. Her mother reads texts about four hours late.
 
-**A self-test.** A button that says *Test the locked screen*. Ten seconds later her phone does exactly what it'll do at 8pm, so you watch it work once in the room rather than finding out on a night that matters.
+She could call, but she has ninety seconds and a meeting, and anyway there's something about phoning your mother to ask whether she's taken her tablets. It changes the shape of the relationship. You become the one who checks.
 
-**Two ways to answer.** She can talk, or she can press one very large button. The buttons bypass the AI entirely and write straight to the record.
+So she does what she does most mornings. Nothing. And carries it around all day.
 
-**Telugu, properly.** Not an English app with translated labels. The screen, the spoken prompt, the listening and the reply are all in the household's language. The medicine name stays exactly as her daughter typed it, in her script.
-
-**A care team, not a lone carer.** One account covers everyone you look after. Invite your brother, your sister, the neighbour with a key. Each person is messaged separately.
-
-**Escalation to a human.** If two reminders get no answer, the system stops trying and tells someone.
+*[VISUAL 1 — hero: a phone face-down on a kitchen counter beside a strip of tablets]*
 
 ---
 
-## Three numbers, not one
+## The problem nobody calls a problem
 
-Back to that 80%.
+This isn't a medical emergency. Nobody is in danger this morning.
 
-An unanswered dose is four different things wearing the same word. She forgot, which is the case everyone assumes. Or she heard it and hasn't answered yet, and it's 8:02, so nobody has failed at anything. Or the phone was off, or flat, or in another room. Or it never got to her at all because no phone was ever set up.
+It's just distance, doing what distance does. A parent who's fine, mostly. A child who's competent and busy and four hours away. A tablet that gets taken about eighty percent of the time, and a low hum of worry that never fully switches off.
 
-Only the first is about her. Two of them are about me.
+There are a lot of apps for this. They all do roughly the same thing: at eight o'clock, the phone makes a noise.
 
-So the dashboard doesn't show one number. It shows three: what the doctor prescribed, what we actually managed to ask about, and what came back as an answer. They add up, which means a family can check my arithmetic instead of taking one number on trust.
+And the noise is the problem.
 
-A dose we never delivered doesn't get labelled *Missed*. It says **"Missed — no reminder sent."** Four extra words, and the meaning of the row moves from *she didn't* to *we didn't*. When the numbers don't reconcile, a badge names who's responsible: **ours to fix**. That bar segment isn't red, it's hatched grey, deliberately not another shade of bad.
+Because a notification tone is the same sound as a delivery update. It's the same sound as a bank alert, a group chat, a game she doesn't play asking her to come back. Her phone makes that sound forty times a day, and she has correctly learned to ignore it.
 
-One limit, stated plainly here and in the product's own docs. CareBridge knows it had a registered device to send to. It doesn't know the notification arrived. Nothing short of an answer from her proves that, and I'd rather say so than let the word "delivered" do work it hasn't earned.
+## A notification isn't a voice
 
----
+The idea behind CareBridge is small enough to say in one sentence.
 
-## Architecture
+Instead of a chime at eight o'clock, her daughter's voice.
 
-Everything runs on Google Cloud. Two Cloud Run services, a FastAPI backend and a React dashboard, both built straight from source and both at `--min-instances 0`, so a system nobody's using costs nothing to keep alive.
+Meera records it once, herself, in her own words. *Amma, it's eight o'clock, time for your blood pressure tablet.* That recording is what plays. Not a synthesised approximation of a person, not text read aloud by a machine. Her.
 
-```
-   Cloud Scheduler  * * * * *
-          |  OIDC token + worker secret
-          v
-   +------------------+   due doses, state transitions
-   |  reminder worker | <-------------------------> Firestore
-   |  (Cloud Run)     |                             the record
-   +------------------+
-          |  FCM data-only, priority high
-          v
-   [ locked handset ]  tone 2.6s  ->  her daughter's voice
-          |
-     she speaks                        she presses
-          |                                 |
-          v                                 |
-   Gemini 3.6 Flash (ADK, Vertex)           |  bypasses
-   7 tools, no elder_id parameter           |  the agent
-          |                                 |
-          +----------> transaction <--------+
-                       validate + write
-                            |
-                            v
-                    ledger  ->  dashboard
-```
+The phone wakes up even though it's locked and face-down and on silent, because the reminder is tagged as alarm audio rather than a notification. A tone rings for about two and a half seconds before the voice starts, which sounds like a fussy implementation detail and isn't: the phone is usually across the room, and a voice that begins before she's looking at it is a voice she doesn't hear.
 
-Four components, and each one has a job the others can't do:
+Then her daughter talks to her about her tablet.
 
-- **The record.** Firestore. Every dose is a small state machine: pending, reminder sent, snoozed, taken, declined, escalated, cancelled.
-- **The clock.** Cloud Scheduler, once a minute, driving a worker on Cloud Run.
-- **The reach.** Firebase Cloud Messaging into an Android app that owns the locked-screen wake.
-- **The conversation.** Gemini via the Agent Development Kit, which can request changes but never makes them.
+That was the whole idea. I thought it was the product.
 
 ---
 
-## How it works, step by step
+## Then: what if nobody answers?
 
-**1. The tick.** Cloud Scheduler runs one job every minute against the reminder worker. That endpoint is guarded twice: an OIDC identity token Cloud Run checks, and an application-level shared secret compared in constant time. Either would probably be fine alone. It's a URL that can make somebody's phone ring at 3am, so it has both.
+Here's where it stopped being simple.
 
-**2. The read.** The worker asks Firestore which doses are due. Every transition is validated inside a transaction, and an illegal move returns a 409. A dose that's already taken can't be quietly reopened by a retry, by the model, or by a caregiver double-tapping something.
+The reminder plays at eight. At 8:15, Meera opens the dashboard between meetings, and it says one of two things.
 
-**3. The push.** FCM wakes the handset. Android gets data-only messages at high priority, which is deliberate: the system tray can't produce a full-screen wake on a locked phone, so the app has to own that rather than hand it to the OS. The tone is tagged as alarm audio so it sounds through silent and Do Not Disturb, which is where an elderly person's phone tends to live.
+Either her mother took the tablet. Or she didn't.
 
-**4. The ring, then the voice.** A tone plays for about two and a half seconds before the recording starts. That sounds fussy and isn't: the phone is usually across the room, and a voice that begins before she's looking at it is a voice she doesn't hear.
+And that second answer is a lie. Not a small one.
 
-**5. The answer, by two separate paths.** Speech goes to Gemini through the ADK. A button press doesn't go near the model at all.
+## A missed dose isn't always a missed dose
 
-**6. The write.** Both paths land on the same transaction. Whatever decided it, the change is re-validated server-side before anything is recorded.
+When a dose goes unanswered, at least four different things might have happened.
 
-**7. The ledger**, which is what her daughter reads at 11:40pm.
+She forgot. That's the one everybody assumes, and it's the only one that's actually about her.
 
-And if nobody answers at all:
+She heard it and hasn't answered yet. It's 8:02. She's mid-conversation, or the kettle's on. Nobody has failed at anything.
 
-```
-   t+0    reminder      attempt 1   phone rings, voice plays
-            |
-            |  no answer
-            v
-   t+10   reminder      attempt 2   same dose, same voice
-            |
-            |  still no answer
-            v
-   t+20   ESCALATE                  stop trying, tell a person
-            |
-            +--> push to the care team
-            |
-            +--> email, 5 minutes later
-                 one message per recipient
-                 no medicine name in the subject
-```
+The phone was off, or flat, or in another room, or she'd left it charging in the bedroom. The reminder went out. It arrived nowhere.
 
-Two attempts, then it stops. A system that keeps ringing an unanswered phone isn't being diligent, it's being ignored, and what actually helps at that point is a person.
+Or it never reached her at all. The phone was never properly set up. The pairing didn't finish. Permission was never granted on that screen with the two buttons that look identical.
 
-The email goes one per recipient so a care team never gets accidentally introduced to itself. A single group email would put the neighbour's address in front of the whole family, which isn't anyone's to hand out. The subject line never names the medicine, because it's going to land on a lock screen in a room that may have other people in it.
+Only the first is about her mother.
+
+Two of them are about my software.
+
+And every reminder app I looked at rolls all four into one number and shows it to an already-anxious person as a fact about their parent. *8 of 10 doses taken.* Eighty percent. Amber.
+
+That number isn't a fact about an eighty-year-old woman. It's a fact about the software, wearing her name.
 
 ---
 
-## The Google Cloud stack
+## Scheduled, asked, answered, taken
 
-Ten APIs, all enabled from one block in the deploy script.
+The fix wasn't a better notification. It was refusing to collapse four states into two.
 
-```
-SERVICE                WHAT IT DOES, AND THE DELIBERATE PART
----------------------  ---------------------------------------
-Cloud Run  x2          API + dashboard; min-instances 0
-Firestore              the record; transitions inside a txn
-Cloud Scheduler        fires the worker 1/min; OIDC + secret
-Firebase Cloud Msg     wakes the handset; data-only, alarm
-Firebase Auth          two identities; revocation checked
-Vertex AI + Gemini     the conversation; analyst has 0 tools
-Cloud Text-to-Speech   speaks the reply; cached, 0.9x, 5s cap
-Cloud Storage          photos + voice; bucket-scoped role
-Secret Manager         tokens; per-secret, never logged
-Cloud Build            builds from source; 3 roles, not editor
-```
+A dose moves through stages, and each stage belongs to somebody:
 
-A few of those deserve a sentence.
+*⬇ DROP IMAGE HERE — d2_states.png (The Reminder State Model) ⬇*
 
-**Firebase Auth** handles two quite different identities. Caregivers sign in normally. The elder's phone signs in with a custom token carrying an `elder_id` claim, minted only after a pairing code is redeemed, and every call from that phone gets a revocation check so "sign out all phones" takes effect immediately instead of whenever a cached token expires. An elder device token is rejected outright if it ever shows up as a caregiver credential.
+**Scheduled** is what the doctor said. **Asked** means we got as far as a phone. **Answered** means she replied. **Taken** is what she told us.
 
-**Cloud Text-to-Speech** runs at 0.9× rate, slower than default and better for an older listener. It's cached so the same handful of phrases aren't re-synthesised and re-billed all day, and the endpoint requires a paired-elder token so only a real phone can spend synthesis quota.
+The gaps between those stages are the entire product. A dose stuck between *scheduled* and *asked* is my failure. A dose sitting at *asked* at 8:02 isn't anyone's failure yet. Only a dose that reached *answered* tells you anything at all about her.
 
-**IAM** is the detail I'm most pleased with, and it's the least interesting to look at. The deploy script doesn't only grant permissions, it removes them. Earlier versions had handed the API service account project-wide storage and token-signing rights, which was more than it ever needed. The script now narrows both to the single media bucket and to the account signing as itself, and deletes the old broad grants every time it runs.
+So the dashboard shows three numbers instead of one: what was prescribed, what we managed to ask about, and what came back. They add up. Meera can check my arithmetic instead of taking a percentage on trust.
 
-Two things worth naming so they don't get miscredited. Speech *recognition* isn't a Google Cloud service here, it's the browser's Web Speech API and Android's on-device recogniser. And the escalation email is ordinary SMTP, not a managed mail product.
+*[VISUAL 2 — the dashboard: three numbers and the "ours to fix" badge]*
+
+## When it's our fault, we say so
+
+If two reminders never reached the phone, the dashboard doesn't say *2 missed*.
+
+It says **ours to fix**, in a badge, naming who's responsible. The bar segment for those doses isn't red. It's hatched grey, deliberately not another shade of bad, because it isn't her failure and shouldn't be coloured like one. And the row itself reads **"Missed — no reminder sent."**
+
+Four extra words. They move the meaning from *she didn't* to *we didn't*.
+
+I want to be precise about a limit here, because it would be easy to overstate. CareBridge knows it had a registered device to send to. It doesn't know the notification arrived. Nothing short of an answer from her actually proves that, and the system never pretends otherwise. "We had somewhere to send it" is a weaker claim than "she got it," and it's the true one.
+
+## And if nobody answers, a person finds out
+
+One reminder at eight. A second at ten past. At around twenty minutes, it stops.
+
+Two attempts, then it gives up.
+
+A system that keeps ringing an unanswered phone isn't being diligent. It's being ignored. What actually helps at that point is a person, so at around twenty minutes CareBridge gives up and says so to somebody who can do something about it.
+
+The email goes one message per recipient, so a care team never gets accidentally introduced to itself. And the subject line never contains the medicine name, because it's going to appear on a lock screen in a room that may have other people in it.
+
+Care isn't usually one person, either. One account covers everyone you look after, and you can invite your brother, your sister, the neighbour with a key.
 
 ---
 
-## How the AI is constrained
+## How it actually works
 
-Ask most people what the AI does here and they'll guess *understands what she said*. It's closer to the opposite. The most important thing this agent does is decline to interpret.
+*⬇ DROP IMAGE HERE — d1_workflow.png (End-to-End Care Workflow) ⬇*
 
-An elderly person answering a phone at 8pm says things like *okay*. Or *I will*. Or *mm*. Or nothing at all. Every one of those is a plausible yes, and every one is also a plausible *I didn't hear you*.
+Underneath that, the machinery:
 
-So the instruction is blunt about it:
+*⬇ DROP IMAGE HERE — d4_layers.png (System Architecture) ⬇*
+
+**Firestore holds the record**, and every dose is a small state machine. What matters is that transitions are validated *inside* a transaction: an illegal move returns a 409, and a dose that's already taken can't be quietly reopened by a retry, by the model, or by someone double-tapping a button. The states aren't a label on the data. They're enforced.
+
+**Cloud Scheduler is the clock**, running the worker once a minute. That endpoint is guarded twice, with an OIDC identity token that Cloud Run checks and an application-level secret compared in constant time. Either would probably do alone. It's a URL that can make somebody's phone ring at three in the morning, so it has both.
+
+**Firebase Cloud Messaging does the waking**, with data-only messages at high priority. That's deliberate: the system tray can't produce a full-screen wake on a locked phone, so the Android app has to own that behaviour rather than hand it to the OS.
+
+**Two Cloud Run services** carry the API and the dashboard, both at `--min-instances 0`, so a system nobody's using costs nothing to keep running. **Cloud Storage** holds the recordings and photos, **Secret Manager** the credentials, granted per secret rather than project-wide.
+
+One infrastructure detail I'm oddly proud of, and it's the least interesting to look at. The deploy script doesn't only grant permissions, it removes them. An earlier version had given the API service account project-wide storage and signing rights, far more than it needed. The script now narrows both and deletes the old broad grants every time it runs.
+
+---
+
+## Where the AI belongs, and where it doesn't
+
+It would have been easy to put a language model in the middle of this. A hackathon mentions agents, so you reach for an agent.
+
+That would have been the wrong call, and I want to explain why rather than just claim restraint.
+
+The medication schedule is deterministic. State transitions are deterministic. What gets written to the record is decided by a transaction, not by a model. Those things are boring and they should stay boring, because the cost of getting them wrong is somebody's mother taking two doses of a blood pressure tablet.
+
+Where a model genuinely helps is the conversation at the dose. An elderly person answering a phone at eight in the morning doesn't say "confirm." She says *okay*, or *I will*, or *mm*, or nothing at all.
+
+And here's the thing about all of those: every one is a plausible yes, and every one is also a plausible *I didn't hear you*.
+
+So the agent's most important job isn't understanding her. It's refusing to guess. The instruction is blunt about it:
 
 > Never treat an ambiguous reply as a confirmation. "Okay", "alright", "mm", "I will" and silence are not confirmations.
 
-When the agent can't tell, it asks one short question, *Have you taken it just now?*, and if that still doesn't settle it then it records nothing and says so. The reminder carries on exactly as it would have. If it keeps happening the family gets told.
+When it can't tell, it asks one short question — *Have you taken it just now?* — and if that still doesn't settle it, it records nothing and says so. The reminder carries on exactly as it would have. If it keeps happening, the family gets told.
 
 The reasoning is written into the prompt, and it's the sentence the whole system turns on:
 
 > A confirmation nobody actually gave is the worst thing this system can produce: the family stop worrying, the reminder stops, and the tablet is still on the table.
 
-A false negative costs a repeated reminder. A false positive costs everything the product is for. That asymmetry is the whole design.
+A false negative costs a repeated reminder. A false positive costs everything the product is for. That asymmetry is the design.
 
-Three other rules earn their place. Nothing gets said that a tool didn't return (*if a tool did not return it, you do not know it*), which is how you stop a language model inventing a dose. Medicine names are never translated or spelled out phonetically. And times never get reformatted: the tools hand the model a time already phrased the way that family says it, and the model repeats it back rather than deciding for a second time whether 7pm counts as evening or night.
+Two other rules earn their place. Nothing gets said that a tool didn't return, which is how you stop a model inventing a dose. And medicine names are never translated or spelled out phonetically, because the wrong medicine name is the one mistake this whole thing exists to prevent.
 
-None of that is enforced by the model, though. It's prompt-level, and the documentation says so rather than implying otherwise. What's actually enforced sits underneath, and it splits three ways.
+None of that is enforced *by* the model, and I'd rather say so than imply otherwise. It's prompt-level. What's actually enforced sits underneath:
 
-**The model may:** read the current reminder, ask one clarifying question, phrase a reply in her language, request a change by calling a tool, and record that it couldn't understand her.
+**The model may** read the current reminder, ask a clarifying question, reply in her language, request a change by calling a tool, and record that it couldn't understand her.
 
-**The model may not:** pass an `elder_id`, reopen a finished dose, or change a dose, a schedule or a food instruction.
+**It may not** pass an elder id, reopen a finished dose, or change a dose or a schedule.
 
-**Only the server decides:** whether a transition is legal, which elder this caller actually is, whether a dose is already closed, and what finally gets written.
+**Only the server decides** whether a transition is legal, which elder the caller is, and what finally gets written.
 
-The tools take no `elder_id` parameter, so identity comes from the authenticated caller and there's no phrasing that gets you into another household's records. And the two large buttons on the elder's screen reach that transaction without the model being involved at all, which means a total Gemini outage still records a tablet.
+There's a second agent that writes the wording of escalation alerts. It has zero tools and an eight-second timeout, so it can rephrase figures it's handed and it cannot touch a record. An alert never waits on a model.
 
-There are two agents, and the split matters. The companion agent talks to the elder and holds seven tools. The analyst agent that writes alert wording has zero tools and an eight-second timeout, so an alert never waits on a model.
+And on the elder's screen there are two very large buttons that skip the agent entirely and write straight to the record. If Gemini is down, the tablet still gets logged.
 
 The intelligence is allowed to be helpful. It isn't allowed to be the last line of defence.
 
 ---
 
-## What's missing
+## What it isn't
 
-The companion agent has no timeout. The analyst got one and the elder-facing path didn't, so a slow model can block her turn until Cloud Run gives up at 120 seconds. The clients degrade reasonably and the buttons still work, so it isn't catastrophic, but it's the one real hole in a failure design I'm otherwise happy with.
+CareBridge is not a medical device. It doesn't diagnose, it doesn't prescribe, and it doesn't decide anything about anyone's treatment. The family sets the schedule; the software's only opinion is when to speak and what to admit.
 
-The alerts tab is scoped to the caregiver rather than the elder you're currently looking at, so with two parents in one account the badge counts both. That's a bug, not a decision.
+The product's own footer says it plainly: *CareBridge reminds. It does not advise, diagnose, or replace a doctor.*
 
-There's no rate limiting, no retention policy, and no monitoring beyond whatever Cloud Run captures by default. The database security rules exist in the repo but aren't deployed; clients never touch the database directly so nothing is exposed, but I'd rather say that precisely than let a file sitting in a folder imply more than it does.
+There's real access control underneath. Every request is checked against who's asking, cross-tenant access is refused and unit-tested, pairing codes are hashed and single-use, and a lost phone can be signed out immediately rather than whenever a cached token expires.
 
-That list isn't modesty. It's the same discipline as the rest of the product, pointed at myself. A system that won't guess what an elderly woman meant shouldn't be guessing about its own security posture either.
-
-None of this made CareBridge more impressive in a demo. What it did was make one number, the one an anxious person checks at 11:40pm from several hundred miles away, mean what it says.
-
-Which felt like the part worth getting right.
+But I'm not going to list compliance acronyms. There's no rate limiting, no retention policy, and no monitoring beyond what Cloud Run captures by default. The database rules exist in the repository but aren't deployed. Clients never touch the database directly so nothing's exposed, but I'd rather say that precisely than let a file in a folder imply more than it does.
 
 ---
 
-*CareBridge: FastAPI on Cloud Run, Firestore, Firebase Auth and Cloud Messaging, Cloud Scheduler, Cloud Storage, Secret Manager, Cloud Text-to-Speech, and Gemini 3.6 Flash via the Agent Development Kit on Vertex AI. A React dashboard for the family, an Android app for the elder's phone. English and Telugu, end to end. Code at [github.com/valetisreedevi/carebridge](https://github.com/valetisreedevi/carebridge).*
+## What surprised me
+
+I started this thinking the problem was reminders.
+
+Get the voice right, get the phone to wake up, get the tone loud enough. That's a hard engineering problem and I spent weeks on it and it works.
+
+Then I put it in front of a real household and discovered the reminder was the easy half. The hard half was the sentence on the dashboard the next morning. Because as soon as the software reports *anything*, it's making a claim about a person who isn't in the room to argue with it.
+
+The second surprise was less flattering. I'd been rigorous about *whose fault* a dose was and completely careless about *when* it was — an unanswered dose stayed "happening right now" indefinitely, so a newly-paired phone would immediately announce a dose from four hours earlier. I fixed it. Three days later the same bug turned up somewhere else, in a different endpoint reading the same data, because I'd fixed the instance rather than the class.
+
+Which is a very ordinary mistake, and it's the reason the honest-accounting thing isn't a pose. I need it. I'm the one who keeps getting this wrong.
+
+## What's next
+
+Decline exists in the model but has no button on either screen yet — you can only tell it you're not taking something by saying so out loud, which is backwards. The alerts view is scoped to the caregiver rather than the person you're looking at, so with two parents in one account the badge counts both. The elder-facing agent needs the timeout its sibling already has.
+
+English and Telugu work end to end today. Hindi, Tamil and Kannada have voices but not the full path, and I'd rather ship two languages properly than five badly.
+
+---
+
+It's 8:04. Meera's meeting has started.
+
+Two hundred kilometres away a phone lit up on a kitchen counter, rang for two and a half seconds, and then her daughter said *Amma, it's eight o'clock*.
+
+Her mother pressed the big green button, said something to the phone that nobody recorded, and went back to her tea.
+
+At 8:15, between two slides, Meera looks at her phone and sees the only three words that were ever worth building this for.
+
+*She took it.*
+
+Not eighty percent. Not a ring, not an amber warning, not an inference dressed up as a fact.
+
+She couldn't be there.
+
+But her voice could.
+
+**CareBridge — still there, even when you're not.**
+
+---
+
+*Built with FastAPI on Cloud Run, Firestore, Firebase Auth and Cloud Messaging, Cloud Scheduler, Cloud Storage, Secret Manager, Cloud Text-to-Speech, and Gemini via the Agent Development Kit on Vertex AI. A React dashboard for the family and an Android app for the elder's phone, running in daily use in one home. Code at [github.com/valetisreedevi/carebridge](https://github.com/valetisreedevi/carebridge).*
