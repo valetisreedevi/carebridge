@@ -16,8 +16,6 @@ She could call, but she has ninety seconds and a meeting, and anyway there's som
 
 So she does what she does most mornings. Nothing. And carries it around all day.
 
-*[VISUAL 1 — hero: a phone face-down on a kitchen counter beside a strip of tablets]*
-
 ---
 
 ## The problem nobody calls a problem
@@ -94,8 +92,6 @@ The gaps between those stages are the entire product. A dose stuck between *sche
 
 So the dashboard shows three numbers instead of one: what was prescribed, what we managed to ask about, and what came back. They add up. Meera can check my arithmetic instead of taking a percentage on trust.
 
-*[VISUAL 2 — the dashboard: three numbers and the "ours to fix" badge]*
-
 ## When it's our fault, we say so
 
 If two reminders never reached the phone, the dashboard doesn't say *2 missed*.
@@ -108,11 +104,9 @@ I want to be precise about a limit here, because it would be easy to overstate. 
 
 ## And if nobody answers, a person finds out
 
-One reminder at eight. A second at ten past. At around twenty minutes, it stops.
+One reminder at eight. A second at ten past. Then it stops.
 
-Two attempts, then it gives up.
-
-A system that keeps ringing an unanswered phone isn't being diligent. It's being ignored. What actually helps at that point is a person, so at around twenty minutes CareBridge gives up and says so to somebody who can do something about it.
+A system that keeps ringing an unanswered phone isn't being diligent. It's being ignored. What actually helps at that point is a person, so at around the twenty-minute mark CareBridge gives up and says so to somebody who can do something about it.
 
 The email goes one message per recipient, so a care team never gets accidentally introduced to itself. And the subject line never contains the medicine name, because it's going to appear on a lock screen in a room that may have other people in it.
 
